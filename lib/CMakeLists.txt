@@ -1,0 +1,1 @@
+add_library(hsm4c hsm4c.c)

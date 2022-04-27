@@ -5,7 +5,9 @@ include(CTest)
 enable_testing()
 
 add_subdirectory(src)
+add_subdirectory(lib)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)

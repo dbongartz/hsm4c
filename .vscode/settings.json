@@ -1,3 +1,4 @@
 {
-    "cmake.configureOnOpen": false
+    "cmake.configureOnOpen": false,
+    "clangd.arguments": ["-pretty", "--background-index", "--compile-commands-dir=build"]
 }
