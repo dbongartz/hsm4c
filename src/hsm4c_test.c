@@ -6,7 +6,7 @@
 int main() {
     printf("Hello, World!\n");
 
-    hsm4c_test();
+    test();
 
     return EXIT_SUCCESS;
 }
