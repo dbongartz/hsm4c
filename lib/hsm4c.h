@@ -31,11 +31,11 @@ struct tran {
 
 #define TRAN(event, action, guard, state) { .event_n = event, .action_fn = action, .guard_fn = guard, .target_state = &state_##state }
 
-#define ASSIGN_TRAN(name, entry, exit, user_data, ...) \
-static const tran_t tran_list_##name[] = { __VA_ARGS__ }; \
-static const state_t state_##name = { \
-    .tran_list = tran_list_##name, \
-    .tran_list_size = sizeof(tran_list_##name) / sizeof(tran_list_##name[0]), \
+#define ASSIGN_TRAN(state, entry, exit, ...) \
+static const tran_t tran_list_##state[] = { __VA_ARGS__ }; \
+static const state_t state_##state = { \
+    .tran_list = tran_list_##state, \
+    .tran_list_size = sizeof(tran_list_##state) / sizeof(tran_list_##state[0]), \
     .entry_fn = entry, \
     .exit_fn = exit, \
 }

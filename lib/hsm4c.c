@@ -11,7 +11,7 @@ void dispatch(state_m_t *statem, int event) {
     const tran_t *tran = &state->tran_list[i];
 
     if (tran->event_n == event) {
-      printf("Event %d found.\n", event);
+      printf("Event %d found in state %p\n", event, state);
 
       if (tran->guard_fn && !tran->guard_fn(statem->data))
         return;
