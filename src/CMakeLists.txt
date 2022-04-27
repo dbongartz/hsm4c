@@ -1,0 +1,1 @@
+add_executable(hsm4c main.c)
