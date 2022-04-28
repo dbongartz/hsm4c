@@ -42,14 +42,17 @@ struct tran {
     .target_state = &STATE_NAME(state), \
 }
 
-#define POPULATE_STATE(staten, entry, exit, tran, ...) \
-static tran_t tran_list_##staten[] = { tran, __VA_ARGS__ }; \
+#define POPULATE_STATE(staten, entry, exit, parent_state, initial_state, ...) \
+static tran_t tran_list_##staten[] = { __VA_ARGS__ }; \
 static state_t STATE_NAME(staten) = { \
     .name = #staten, \
     .tran_list = tran_list_##staten, \
     .tran_list_size = sizeof(tran_list_##staten) / sizeof(tran_list_##staten[0]), \
     .entry_fn = entry, \
     .exit_fn = exit, \
+    .parent = parent_state, \
+    .child = initial_state, \
+    .initial = initial_state \
 }
 
 void dispatch(state_m_t *statem, int event);

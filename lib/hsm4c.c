@@ -110,14 +110,13 @@ static void print_branch(state_t * root) {
 bool dispatch_hsm(state_t *s, int event) {
   printf("Dispatching event %d...\n", event);
 
-
   // Walk down all childs until leaf
   // Check if event can be handled there
   // Get handling child and target state
 
   // (Abstraction)
-  // Find all nodes walking up from handling state (exit) and walking down (entry) to reach target state
-  // Set state to init when no history and exit()
+  // Find all nodes walking up from handling state (exit) and walking down
+  // (entry) to reach target state Set state to init when no history and exit()
   // Set state to next child walking down and entry()
 
   // (Concrete algorithm)
@@ -127,8 +126,8 @@ bool dispatch_hsm(state_t *s, int event) {
 
   // Call transition action
 
-  // Walk up target parents to common node and set each to the child coming from.
-  // Walk down again and call entry()
+  // Walk up target parents to common node and set each to the child coming
+  // from. Walk down again and call entry()
 
   // Walk down target childs and call entry()
 
@@ -150,45 +149,54 @@ bool dispatch_hsm(state_t *s, int event) {
   if (handler && trans) {
     target = trans->target_state;
 
-    printf("Handling event %d in state %s targeting %s\n", event, handler->name, target->name);
+    printf("Handling event %d in state %s targeting %s\n", event, handler->name,
+           target->name);
 
-    // Find lowest common ancestor
-    lcr = find_lcr(leaf, target);
+    if (handler != target) {
 
-    // Walk up from leaf, exit and reset
-    walker = leaf;
-    while (walker != lcr) {
-      // Exit
-      if (walker->exit_fn) {
-        walker->exit_fn(walker->name);
+      // Find lowest common ancestor
+      lcr = find_lcr(leaf, target);
+
+      // Walk up from leaf, exit and reset
+      walker = leaf;
+      while (walker != lcr) {
+        // Exit
+        if (walker->exit_fn) {
+          walker->exit_fn(walker->name);
+        }
+        // Reset
+        walker->child = walker->initial;
+
+        walker = walker->parent;
       }
-      // Reset
-      walker->child = walker->initial;
 
-      walker = walker->parent;
-    }
-
-    // Transition
-    if (trans->action_fn) {
-      trans->action_fn(&trans->event_n);
-    }
-
-    // Walk up from target, set child
-    walker = target;
-    while (walker != lcr) {
-      if(walker->parent) {
-        walker->parent->child = walker;
+      // Transition
+      if (trans->action_fn) {
+        trans->action_fn(&trans->event_n);
       }
-      walker = walker->parent;
-    }
 
-    // Walk down from lcr till leaf and entry
-    walker = lcr;
-    while (walker) {
-      if(walker->entry_fn) {
-        walker->entry_fn(walker->name);
+      // Walk up from target, set child
+      walker = target;
+      while (walker != lcr) {
+        if (walker->parent) {
+          walker->parent->child = walker;
+        }
+        walker = walker->parent;
       }
-      walker = walker->child;
+
+      // Walk down from lcr till leaf and entry
+      walker = lcr->child;
+      while (walker) {
+        if (walker->entry_fn) {
+          walker->entry_fn(walker->name);
+        }
+        walker = walker->child;
+      }
+    } else {
+      // Just transition and return
+      if (trans->action_fn) {
+        trans->action_fn(&trans->event_n);
+      }
     }
 
     print_branch(find_root(s));
