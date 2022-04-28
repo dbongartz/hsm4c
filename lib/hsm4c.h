@@ -27,15 +27,22 @@ struct tran {
     const state_t *target_state;
 };
 
-#define STATE(name) static const state_t state_##name
+#define STATE_NAME(name) state_##name
 
-#define TRAN(event, action, guard, state) { .event_n = event, .action_fn = action, .guard_fn = guard, .target_state = &state_##state }
+#define DEFINE_STATE(name) static const state_t STATE_NAME(name);
 
-#define ASSIGN_TRAN(state, entry, exit, ...) \
-static const tran_t tran_list_##state[] = { __VA_ARGS__ }; \
-static const state_t state_##state = { \
-    .tran_list = tran_list_##state, \
-    .tran_list_size = sizeof(tran_list_##state) / sizeof(tran_list_##state[0]), \
+#define TRAN(event, action, guard, state) { \
+    .event_n = event, \
+    .action_fn = action, \
+    .guard_fn = guard, \
+    .target_state = &STATE_NAME(state), \
+}
+
+#define POPULATE_STATE(staten, entry, exit, tran, ...) \
+static const tran_t tran_list_##staten[] = { tran, __VA_ARGS__ }; \
+static const state_t STATE_NAME(staten) = { \
+    .tran_list = tran_list_##staten, \
+    .tran_list_size = sizeof(tran_list_##staten) / sizeof(tran_list_##staten[0]), \
     .entry_fn = entry, \
     .exit_fn = exit, \
 }
