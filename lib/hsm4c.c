@@ -45,7 +45,7 @@ static state_t *find_root(state_t *s) {
 
 static handler_trans_t find_handler_and_trans(state_t *state, int event) {
   while (state) {
-    const_state_t *cs = state->_state;
+    const const_state_t *cs = state->_state;
     for (size_t i = 0; i < cs->tran_list_size; ++i) {
       const tran_t *trans = &cs->tran_list[i];
 

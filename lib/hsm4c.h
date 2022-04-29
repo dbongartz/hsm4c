@@ -26,7 +26,7 @@ struct const_state {
 
 struct state {
     state_t *child;
-    const_state_t *_state;
+    const const_state_t *_state;
 };
 
 struct tran {
