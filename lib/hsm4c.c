@@ -2,40 +2,11 @@
 
 #include <stdio.h>
 
-void dispatch(state_m_t *statem, int event) {
-  printf("Dispatching event %d...\n", event);
 
-  const state_t *s = statem->state;
-
-  for (size_t i = 0; i < s->tran_list_size; ++i) {
-    const tran_t *tran = &s->tran_list[i];
-
-    if (tran->event_n == event) {
-      printf("Event %d found in state %p\n", event, s);
-
-      if (tran->guard_fn && !tran->guard_fn(statem->data))
-        return;
-
-      if (s->exit_fn)
-        s->exit_fn(statem->data);
-
-      if (tran->action_fn)
-        tran->action_fn(statem->data);
-
-      s = tran->target_state;
-      statem->state = s;
-
-      printf("New state %p.\n", s);
-
-      if (s->entry_fn)
-        s->entry_fn(statem->data);
-
-      return;
-    }
-  }
-
-  printf("Event %d not handled\n", event);
-}
+typedef struct {
+  state_t *handler;
+  const tran_t *trans;
+} handler_trans_t;
 
 // Find lowest common ancestor
 static state_t *find_lcr(state_t *a, state_t *b) {
@@ -45,17 +16,16 @@ static state_t *find_lcr(state_t *a, state_t *b) {
       if (a == b) {
         return a;
       }
-      b = b->parent;
+      b = b->_state->parent;
     }
     b = entry_b;
-    a = a->parent;
+    a = a->_state->parent;
   }
 
   return NULL;
 }
 
-static state_t * find_leaf(state_t *s) {
-  // Find leaf
+static state_t *find_leaf(state_t *s) {
   state_t *found = NULL;
   while (s) {
     found = s;
@@ -64,44 +34,38 @@ static state_t * find_leaf(state_t *s) {
   return found;
 }
 
-static state_t * find_root(state_t *s) {
-  // Find leaf
+static state_t *find_root(state_t *s) {
   state_t *found = NULL;
   while (s) {
     found = s;
-    s = s->parent;
+    s = s->_state->parent;
   }
   return found;
 }
 
-typedef struct {
-  state_t *handler;
-  tran_t *trans;
-} handler_trans_t;
-
-static handler_trans_t find_handler_and_trans(state_t * state, int event) {
-
+static handler_trans_t find_handler_and_trans(state_t *state, int event) {
   while (state) {
-    for (size_t i = 0; i < state->tran_list_size; ++i) {
-      tran_t *trans = &state->tran_list[i];
+    const_state_t *cs = state->_state;
+    for (size_t i = 0; i < cs->tran_list_size; ++i) {
+      const tran_t *trans = &cs->tran_list[i];
 
       if (trans->event_n == event) {
-        if(trans->guard_fn && trans->guard_fn(&event)) {
-          return (handler_trans_t) { .handler = state, .trans = trans};
+        if (trans->guard_fn && trans->guard_fn(&event)) {
+          return (handler_trans_t){.handler = state, .trans = trans};
         }
       }
     }
-    state = state->parent;
+    state = cs->parent;
   }
 
-  return (handler_trans_t) { NULL, NULL};
+  return (handler_trans_t){NULL, NULL};
 }
 
-static void print_branch(state_t * root) {
-  printf("Root state: %s with children: ", root->name);
+static void print_branch(state_t *root) {
+  printf("Root state: %s with children: ", root->_state->name);
   state_t *s = s->child;
   while (s) {
-    printf("%s ", s->name);
+    printf("%s ", s->_state->name);
     s = s->child;
   }
   putchar('\n');
@@ -133,7 +97,7 @@ bool dispatch_hsm(state_t *s, int event) {
 
   state_t *walker = NULL;
   state_t *handler = NULL;
-  tran_t *trans = NULL;
+  const tran_t *trans = NULL;
   state_t *target = NULL;
   state_t *leaf = NULL;
   state_t *lcr = NULL;
@@ -149,54 +113,46 @@ bool dispatch_hsm(state_t *s, int event) {
   if (handler && trans) {
     target = trans->target_state;
 
-    printf("Handling event %d in state %s targeting %s\n", event, handler->name,
-           target->name);
+    printf("Handling event %d in state %s targeting %s\n", event, handler->_state->name,
+           target->_state->name);
 
-    if (handler != target) {
+    // Find lowest common ancestor
+    lcr = find_lcr(leaf, target);
 
-      // Find lowest common ancestor
-      lcr = find_lcr(leaf, target);
-
-      // Walk up from leaf, exit and reset
-      walker = leaf;
-      while (walker != lcr) {
-        // Exit
-        if (walker->exit_fn) {
-          walker->exit_fn(walker->name);
-        }
-        // Reset
-        walker->child = walker->initial;
-
-        walker = walker->parent;
+    // Walk up from leaf, exit and reset
+    walker = leaf;
+    while (walker != lcr) {
+      // Exit
+      if (walker->_state->exit_fn) {
+        walker->_state->exit_fn((void *)walker->_state->name);
       }
+      // Reset
+      walker->child = walker->_state->initial;
 
-      // Transition
-      if (trans->action_fn) {
-        trans->action_fn(&trans->event_n);
-      }
+      walker = walker->_state->parent;
+    }
 
-      // Walk up from target, set child
-      walker = target;
-      while (walker != lcr) {
-        if (walker->parent) {
-          walker->parent->child = walker;
-        }
-        walker = walker->parent;
-      }
+    // Transition
+    if (trans->action_fn) {
+      trans->action_fn((void *)&trans->event_n);
+    }
 
-      // Walk down from lcr till leaf and entry
-      walker = lcr->child;
-      while (walker) {
-        if (walker->entry_fn) {
-          walker->entry_fn(walker->name);
-        }
-        walker = walker->child;
+    // Walk up from target, set child
+    walker = target;
+    while (walker != lcr) {
+      if (walker->_state->parent) {
+        walker->_state->parent->child = walker;
       }
-    } else {
-      // Just transition and return
-      if (trans->action_fn) {
-        trans->action_fn(&trans->event_n);
+      walker = walker->_state->parent;
+    }
+
+    // Walk down from lcr till leaf and entry
+    walker = lcr->child;
+    while (walker) {
+      if (walker->_state->entry_fn) {
+        walker->_state->entry_fn((void *)walker->_state->name);
       }
+      walker = walker->child;
     }
 
     print_branch(find_root(s));

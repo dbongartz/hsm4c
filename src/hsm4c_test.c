@@ -16,6 +16,8 @@ DEFINE_STATE(s3);
 DEFINE_STATE(s4);
 DEFINE_STATE(s5);
 
+POPULATE_STATE(root, NULL, NULL, NULL, &state_s1);
+
 POPULATE_STATE(s1, test_entry, test_exit, &state_root, &state_s2,
     TRAN(1, test_action, test_guard, s4),
     TRAN(3, test_action, test_guard, s3),
@@ -40,10 +42,6 @@ POPULATE_STATE(s5, test_entry, test_exit, &state_s3, NULL,
 );
 
 int main() {
-    state_root.parent = NULL;
-    state_root.child = &state_s1;
-    state_root.initial = &state_s1;
-
     dispatch_hsm(&state_root, 1);
     dispatch_hsm(&state_root, 2);
     dispatch_hsm(&state_root, 2);
