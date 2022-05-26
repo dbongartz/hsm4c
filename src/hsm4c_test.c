@@ -9,12 +9,12 @@ void test_exit(void *data) { printf("Exit: %s\n", (char*)data); }
 void test_action(void *data) { printf("Action: %d\n", *(int*)data); }
 bool test_guard(void *data) { printf("Guard ok: %d\n", *(int*)data); return true; }
 
-DEFINE_STATE(root);
-DEFINE_STATE(s1);
-DEFINE_STATE(s2);
-DEFINE_STATE(s3);
-DEFINE_STATE(s4);
-DEFINE_STATE(s5);
+DECLARE_STATE(root);
+DECLARE_STATE(s1);
+DECLARE_STATE(s2);
+DECLARE_STATE(s3);
+DECLARE_STATE(s4);
+DECLARE_STATE(s5);
 
 POPULATE_STATE(root, NULL, NULL, NULL, &state_s1);
 
