@@ -1,12 +1,28 @@
 {
     "configurations": [
-    {
-        "type": "lldb",
-        "request": "launch",
-        "name": "Launch",
-        "program": "${command:cmake.launchTargetPath}",
-        "args": [],
-        "cwd": "${workspaceFolder}"
-    }
+        {
+            "type": "gdb",
+            "request": "launch",
+            "name": "Ceedling Test Explorer Debug",
+            "target": "./build/test/out/${command:ceedlingExplorer.debugTestExecutable}",
+            "cwd": "${workspaceRoot}",
+            "valuesFormatting": "parseText"
+        },
+        {
+            "type": "gdb",
+            "request": "launch",
+            "name": "Test Ex.",
+            "target": "./build/test/out/test_execution_order_1.out",
+            "cwd": "${workspaceRoot}",
+            "valuesFormatting": "parseText"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Launch",
+            "program": "${command:cmake.launchTargetPath}",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
     ]
 }

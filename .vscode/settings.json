@@ -2,6 +2,7 @@
     "cmake.configureOnOpen": false,
     "clangd.arguments": [
         "-pretty",
-        "--background-index"
-    ]
+        "--background-index",
+    ],
+    "ceedlingExplorer.debugConfiguration": "Ceedling Test Explorer Debug"
 }
