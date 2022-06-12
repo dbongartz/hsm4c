@@ -58,8 +58,8 @@ static handler_trans_t find_handler_and_trans(state_t *state, event_t event) {
     for (size_t i = 0; i < cs->tran_list_size; ++i) {
       const tran_t *trans = &cs->tran_list[i];
 
-      if (trans->event_n == event) {
-        if (!trans->guard_fn || trans->guard_fn(&event)) {
+      if (trans->event_n == event.num) {
+        if (!trans->guard_fn || trans->guard_fn(event)) {
           return (handler_trans_t){.handler = state, .trans = trans};
         }
       }
@@ -76,9 +76,10 @@ static void walk_up_and_exit(state_t *start, state_t *target) {
   do {
     // Exit
     if (walker->_state->exit_fn) {
-      walker->_state->exit_fn((void *)walker->_state->name);
+      walker->_state->exit_fn((void *)walker);
     }
     // Reset
+    printf("flags: %x\n", walker->_state->flags);
     if (!(walker->_state->flags & STATE_FLAG_HISTORY)) {
       walker->child = walker->_state->initial;
     } else {
@@ -103,14 +104,17 @@ static void walk_down_and_entry(state_t *start) {
   state_t *walker = start;
   while (walker) {
     if (walker->_state->entry_fn) {
-      walker->_state->entry_fn((void *)walker->_state->name);
+      walker->_state->entry_fn((void *)walker);
+      if (walker->_state->initial && walker->_state->initial == walker->child && walker->_state->initial_fn) {
+        walker->_state->initial_fn(walker->child);
+      }
     }
     walker = walker->child;
   }
 }
 
-bool dispatch_hsm(state_t *s, int event) {
-  printf("Dispatching event %d on %s...\n", event, s->_state->name);
+bool dispatch_hsm(state_t *s, event_num_t event_num, void *user_data) {
+  printf("Dispatching event %d on %s...\n", event_num, s->_state->name);
 
   // Walk down all childs until leaf
   // Check if event can be handled there
@@ -142,6 +146,7 @@ bool dispatch_hsm(state_t *s, int event) {
   leaf = find_leaf(s);
 
   // Walk up again trying to handle the event
+  event_t event = { .num = event_num, .data = user_data};
   handler_trans_t handler_trans = find_handler_and_trans(leaf, event);
 
   handler = handler_trans.handler;
@@ -152,17 +157,17 @@ bool dispatch_hsm(state_t *s, int event) {
 
     // Self transition
     if (target == NULL) {
-      printf("Handling event %d in state %s as SELF transition.\n", event,
+      printf("Handling event %d in state %s as SELF transition.\n", event.num,
              handler->_state->name);
 
       // Transition
       if (trans->action_fn) {
-        trans->action_fn((void *)&trans->event_n);
+        trans->action_fn(event);
       }
     }
     // Normal Transition
     else {
-      printf("Handling event %d in state %s targeting %s\n", event,
+      printf("Handling event %d in state %s targeting %s\n", event.num,
              handler->_state->name, target->_state->name);
 
       // Find lowest common ancestor
@@ -173,7 +178,7 @@ bool dispatch_hsm(state_t *s, int event) {
 
       // Transition
       if (trans->action_fn) {
-        trans->action_fn((void *)&trans->event_n);
+        trans->action_fn(event);
       }
 
       // Walk up from target, set child
@@ -189,7 +194,7 @@ bool dispatch_hsm(state_t *s, int event) {
     return true;
   }
 
-  printf("Event %d not handled\n", event);
+  printf("Event %d not handled\n", event.num);
 
   print_branch(find_root(s));
 

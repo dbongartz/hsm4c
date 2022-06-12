@@ -6,12 +6,14 @@
 
 /* -------- Typedefs -------- */
 
-typedef int event_t;
+typedef struct event event_t;
+typedef int event_num_t;
 
 typedef void (*action_fn_t)(void *data);
-typedef bool (*guard_fn_t)(void *data);
-typedef action_fn_t entry_fn_t;
-typedef action_fn_t exit_fn_t;
+typedef bool (*guard_fn_t)(event_t e);
+typedef void (*transition_fn_t)(event_t e);
+typedef void (*entry_fn_t)(void *data);
+typedef void (*exit_fn_t)(void *data);
 typedef enum s_flags s_flags_t;
 
 /* --------- Data structures -------- */
@@ -32,6 +34,11 @@ enum s_flags {
     STATE_FLAG_END = (1 << 1),
 };
 
+struct event {
+    event_num_t num;
+    void *data;
+};
+
 struct const_state {
     char const * const name;
     entry_fn_t entry_fn;
@@ -40,6 +47,7 @@ struct const_state {
     const size_t tran_list_size;
     state_t * const parent;
     state_t * const initial;
+    action_fn_t initial_fn;
     s_flags_t flags;
 };
 
@@ -49,8 +57,8 @@ struct state {
 };
 
 struct tran {
-    event_t event_n;
-    action_fn_t action_fn;
+    event_num_t event_n;
+    transition_fn_t action_fn;
     guard_fn_t guard_fn;
     state_t *target_state;
 };
@@ -76,7 +84,7 @@ state_t _STATE_NAME(name) = { \
     ._state = &_CONST_STATE_NAME(name) \
 }
 
-#define _POPULATE_STATE(_name, _entry_fn, _exit_fn, parent_state, initial_state, _flags, ...) \
+#define _POPULATE_STATE(_name, _entry_fn, _exit_fn, parent_state, initial_state, initial_action, _flags, ...) \
 static const tran_t _TRAN_LIST_NAME(_name)[] = { __VA_ARGS__ }; \
 static const const_state_t _CONST_STATE_NAME(_name) = { \
     .name = #_name, \
@@ -86,6 +94,7 @@ static const const_state_t _CONST_STATE_NAME(_name) = { \
     .exit_fn = _exit_fn, \
     .parent = _STATE_T_PTR_OR_NULL(parent_state), \
     .initial = _STATE_T_PTR_OR_NULL(initial_state), \
+    .initial_fn = initial_action, \
     .flags = _flags \
 };
 
@@ -97,12 +106,12 @@ static const const_state_t _CONST_STATE_NAME(_name) = { \
 #define DECLARE_STATE(name) static state_t _STATE_NAME(name);
 #define DECLARE_STATE_GLOBAL(name) DECLARE_STATE(name);
 
-#define POPULATE_STATE(name, entry_fn, exit_fn, parent_state, initial_state, flags, ...) \
-_POPULATE_STATE(name, entry_fn, exit_fn, parent_state, initial_state, flags, __VA_ARGS__) \
+#define POPULATE_STATE(name, entry_fn, exit_fn, parent_state, initial_state, initial_fn, flags, ...) \
+_POPULATE_STATE(name, entry_fn, exit_fn, parent_state, initial_state, initial_fn, flags, __VA_ARGS__) \
 static _DEFINE_STATE(name, initial_state)
 
-#define POPULATE_STATE_GLOBAL(name, entry_fn, exit_fn, parent_state, initial_state, flags, ...) \
-_POPULATE_STATE(name, entry_fn, exit_fn, parent_state, initial_state, flags, __VA_ARGS__) \
+#define POPULATE_STATE_GLOBAL(name, entry_fn, exit_fn, parent_state, initial_state, initial_fn, flags, ...) \
+_POPULATE_STATE(name, entry_fn, exit_fn, parent_state, initial_state, initial_fn, flags, __VA_ARGS__) \
 _DEFINE_STATE(name, initial_state)
 
 #define TRAN(event, action, guard, target) { \
@@ -123,7 +132,7 @@ _DEFINE_STATE(name, initial_state)
  * @param event event to post
  */
 void dispatch(state_m_t *statem, int event);
-bool dispatch_hsm(state_t *s, int event);
+bool dispatch_hsm(state_t *s, event_num_t event_num, void *user_data);
 
 state_t *get_state(state_t *sm);
 state_t *get_statemachine(state_t *s);
