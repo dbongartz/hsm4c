@@ -12,7 +12,7 @@ typedef void (*action_fn_t)(void *data);
 typedef bool (*guard_fn_t)(void *data);
 typedef action_fn_t entry_fn_t;
 typedef action_fn_t exit_fn_t;
-
+typedef enum s_flags s_flags_t;
 
 /* --------- Data structures -------- */
 
@@ -26,14 +26,21 @@ struct state_m {
     void *data;
 };
 
+enum s_flags {
+    STATE_FLAG_NONE = 0,
+    STATE_FLAG_HISTORY = (1 << 0),
+    STATE_FLAG_END = (1 << 1),
+};
+
 struct const_state {
-    const char * name;
+    char const * const name;
     entry_fn_t entry_fn;
     exit_fn_t exit_fn;
-    const tran_t *tran_list;
+    tran_t const * const tran_list;
     const size_t tran_list_size;
-    state_t *parent;
-    state_t *initial;
+    state_t * const parent;
+    state_t * const initial;
+    s_flags_t flags;
 };
 
 struct state {
@@ -51,46 +58,61 @@ struct tran {
 /* --------- Private ---------- */
 
 #define _STATE_NAME(name) state_##name
+#define _TRAN_LIST_NAME(name) name##_tran_list
+#define _CONST_STATE_NAME(name) name##_const_state
 
-#define _DEFINE_STATE(staten, initial_state) \
-state_t STATE_NAME(staten) = { \
-    .child = initial_state, \
-    ._state = &const_state##staten \
+/* Hack to work around having to enter a `&state_name` on POPULATE_STATE(...)
+ * Works by checking the size of state_NONE which is an empty struct versus the actual struct
+ * Never reference state_NONE please :)
+ */
+extern struct{} state_NONE;
+#define _STATE_T_PTR_OR_NULL(name) sizeof(state_t) == sizeof(_STATE_NAME(name)) ? \
+    (state_t *)&_STATE_NAME(name) : NULL
+
+
+#define _DEFINE_STATE(name, initial_state) \
+state_t _STATE_NAME(name) = { \
+    .child = _STATE_T_PTR_OR_NULL(initial_state), \
+    ._state = &_CONST_STATE_NAME(name) \
 }
 
-#define _POPULATE_STATE(staten, entry, exit, parent_state, initial_state, ...) \
-static const tran_t tran_list_##staten[] = { __VA_ARGS__ }; \
-static const const_state_t const_state##staten = { \
-    .name = #staten, \
-    .tran_list = tran_list_##staten, \
-    .tran_list_size = sizeof(tran_list_##staten) / sizeof(tran_list_##staten[0]), \
-    .entry_fn = entry, \
-    .exit_fn = exit, \
-    .parent = parent_state, \
-    .initial = initial_state \
+#define _POPULATE_STATE(_name, _entry_fn, _exit_fn, parent_state, initial_state, _flags, ...) \
+static const tran_t _TRAN_LIST_NAME(_name)[] = { __VA_ARGS__ }; \
+static const const_state_t _CONST_STATE_NAME(_name) = { \
+    .name = #_name, \
+    .tran_list = _TRAN_LIST_NAME(_name), \
+    .tran_list_size = sizeof(_TRAN_LIST_NAME(_name)) / sizeof(_TRAN_LIST_NAME(_name)[0]), \
+    .entry_fn = _entry_fn, \
+    .exit_fn = _exit_fn, \
+    .parent = _STATE_T_PTR_OR_NULL(parent_state), \
+    .initial = _STATE_T_PTR_OR_NULL(initial_state), \
+    .flags = _flags \
 };
 
 /* -------- Public defines -------- */
 
-#define STATE_NAME(name) _STATE_NAME(name)
+#define STATE_DEF(name) _STATE_NAME(name)
+#define STATE_REF(name) &_STATE_NAME(name)
 
-#define DECLARE_STATE(name) static state_t state_##name;
+#define DECLARE_STATE(name) static state_t _STATE_NAME(name);
 #define DECLARE_STATE_GLOBAL(name) DECLARE_STATE(name);
 
-#define POPULATE_STATE(staten, entry, exit, parent_state, initial_state, ...) \
-_POPULATE_STATE(staten, entry, exit, parent_state, initial_state, __VA_ARGS__) \
-static _DEFINE_STATE(staten, initial_state)
+#define POPULATE_STATE(name, entry_fn, exit_fn, parent_state, initial_state, flags, ...) \
+_POPULATE_STATE(name, entry_fn, exit_fn, parent_state, initial_state, flags, __VA_ARGS__) \
+static _DEFINE_STATE(name, initial_state)
 
-#define POPULATE_STATE_GLOBAL(staten, entry, exit, parent_state, initial_state, ...) \
-_POPULATE_STATE(staten, entry, exit, parent_state, initial_state, __VA_ARGS__) \
-_DEFINE_STATE(staten, initial_state)
+#define POPULATE_STATE_GLOBAL(name, entry_fn, exit_fn, parent_state, initial_state, flags, ...) \
+_POPULATE_STATE(name, entry_fn, exit_fn, parent_state, initial_state, flags, __VA_ARGS__) \
+_DEFINE_STATE(name, initial_state)
 
-#define TRAN(event, action, guard, staten) { \
+#define TRAN(event, action, guard, target) { \
     .event_n = event, \
     .action_fn = action, \
     .guard_fn = guard, \
-    .target_state = &state_##staten, \
+    .target_state = _STATE_T_PTR_OR_NULL(target), \
 }
+
+#define STATE_SELF NONE
 
 /* -------- Public methods --------- */
 
@@ -105,5 +127,6 @@ bool dispatch_hsm(state_t *s, int event);
 
 state_t *get_state(state_t *sm);
 state_t *get_statemachine(state_t *s);
+void reset_statemachine(state_t *sm);
 
 #endif

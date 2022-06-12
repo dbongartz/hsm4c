@@ -4,6 +4,8 @@
 
 #include "hsm4c.h"
 
+#include "unity.h"
+
 void test_entry(void *data) { printf("Entry: %s\n", (char*)data); }
 void test_exit(void *data) { printf("Exit: %s\n", (char*)data); }
 void test_action(void *data) { printf("Action: %d\n", *(int*)data); }
@@ -16,27 +18,27 @@ DECLARE_STATE(s3);
 DECLARE_STATE(s4);
 DECLARE_STATE(s5);
 
-POPULATE_STATE(root, NULL, NULL, NULL, &state_s1);
+POPULATE_STATE(root, NULL, NULL, NONE, s1);
 
-POPULATE_STATE(s1, test_entry, test_exit, &state_root, &state_s2,
+POPULATE_STATE(s1, test_entry, test_exit, root, s2,
     TRAN(1, test_action, test_guard, s4),
     TRAN(3, test_action, test_guard, s3),
 );
 
-POPULATE_STATE(s2, test_entry, test_exit, &state_s1, NULL,
+POPULATE_STATE(s2, test_entry, test_exit, s1, NONE,
     TRAN(2, test_action, test_guard, s4),
 );
 
-POPULATE_STATE(s3, test_entry, test_exit, &state_root, &state_s5,
+POPULATE_STATE(s3, test_entry, test_exit, root, s5,
     TRAN(3, test_action, test_guard, s1)
 );
 
-POPULATE_STATE(s4, test_entry, test_exit, &state_s1, NULL,
+POPULATE_STATE(s4, test_entry, test_exit, s1, NONE,
     TRAN(2, test_action, test_guard, s2),
     TRAN(1, test_action, test_guard, s4)
 );
 
-POPULATE_STATE(s5, test_entry, test_exit, &state_s3, NULL,
+POPULATE_STATE(s5, test_entry, test_exit, s3, NONE,
     TRAN(2, test_action, test_guard, s2),
     TRAN(1, test_action, test_guard, s1)
 );

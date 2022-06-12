@@ -59,7 +59,7 @@ static handler_trans_t find_handler_and_trans(state_t *state, event_t event) {
       const tran_t *trans = &cs->tran_list[i];
 
       if (trans->event_n == event) {
-        if (trans->guard_fn && trans->guard_fn(&event)) {
+        if (!trans->guard_fn || trans->guard_fn(&event)) {
           return (handler_trans_t){.handler = state, .trans = trans};
         }
       }
@@ -72,16 +72,21 @@ static handler_trans_t find_handler_and_trans(state_t *state, event_t event) {
 
 static void walk_up_and_exit(state_t *start, state_t *target) {
   state_t *walker = start;
-  while (walker != target) {
+
+  do {
     // Exit
     if (walker->_state->exit_fn) {
       walker->_state->exit_fn((void *)walker->_state->name);
     }
     // Reset
-    walker->child = walker->_state->initial;
+    if (!(walker->_state->flags & STATE_FLAG_HISTORY)) {
+      walker->child = walker->_state->initial;
+    } else {
+      printf("History: %s not reset\n", walker->_state->name);
+    }
 
     walker = walker->_state->parent;
-  }
+  } while (walker != target && start != target);
 }
 
 static void walk_up_and_set_child(state_t *start, state_t *target) {
@@ -95,7 +100,7 @@ static void walk_up_and_set_child(state_t *start, state_t *target) {
 }
 
 static void walk_down_and_entry(state_t *start) {
-  state_t *walker = start->child;
+  state_t *walker = start;
   while (walker) {
     if (walker->_state->entry_fn) {
       walker->_state->entry_fn((void *)walker->_state->name);
@@ -105,7 +110,7 @@ static void walk_down_and_entry(state_t *start) {
 }
 
 bool dispatch_hsm(state_t *s, int event) {
-  printf("Dispatching event %d...\n", event);
+  printf("Dispatching event %d on %s...\n", event, s->_state->name);
 
   // Walk down all childs until leaf
   // Check if event can be handled there
@@ -128,7 +133,6 @@ bool dispatch_hsm(state_t *s, int event) {
 
   // Walk down target childs and call entry()
 
-  state_t *walker = NULL;
   state_t *handler = NULL;
   const tran_t *trans = NULL;
   state_t *target = NULL;
@@ -146,25 +150,39 @@ bool dispatch_hsm(state_t *s, int event) {
   if (handler && trans) {
     target = trans->target_state;
 
-    printf("Handling event %d in state %s targeting %s\n", event,
-           handler->_state->name, target->_state->name);
+    // Self transition
+    if (target == NULL) {
+      printf("Handling event %d in state %s as SELF transition.\n", event,
+             handler->_state->name);
 
-    // Find lowest common ancestor
-    lca = find_lca(leaf, target);
-
-    // Walk up from leaf, exit and reset
-    walk_up_and_exit(leaf, lca);
-
-    // Transition
-    if (trans->action_fn) {
-      trans->action_fn((void *)&trans->event_n);
+      // Transition
+      if (trans->action_fn) {
+        trans->action_fn((void *)&trans->event_n);
+      }
     }
+    // Normal Transition
+    else {
+      printf("Handling event %d in state %s targeting %s\n", event,
+             handler->_state->name, target->_state->name);
 
-    // Walk up from target, set child
-    walk_up_and_set_child(target, lca);
+      // Find lowest common ancestor
+      lca = find_lca(leaf, target);
 
-    // Walk down from lcr till leaf and entry
-    walk_down_and_entry(lca);
+      // Walk up from leaf, exit and reset
+      walk_up_and_exit(leaf, lca);
+
+      // Transition
+      if (trans->action_fn) {
+        trans->action_fn((void *)&trans->event_n);
+      }
+
+      // Walk up from target, set child
+      walk_up_and_set_child(target, lca);
+
+      // Walk down from lca->child till leaf and entry, walk from lca if both
+      // are the same.
+      walk_down_and_entry(lca == leaf ? lca : lca->child);
+    }
 
     print_branch(find_root(s));
 
@@ -180,3 +198,14 @@ bool dispatch_hsm(state_t *s, int event) {
 
 state_t *get_state(state_t *sm) { return find_leaf(sm); }
 state_t *get_statemachine(state_t *s) { return find_root(s); }
+
+void reset_statemachine(state_t *sm) {
+  if (sm->_state->initial == NULL) {
+    sm->child = sm->_state->initial;
+    return;
+  } else {
+    reset_statemachine(sm->child);
+    reset_statemachine(sm->_state->initial);
+    sm->child = sm->_state->initial;
+  }
+}
