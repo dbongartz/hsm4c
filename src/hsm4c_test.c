@@ -27,7 +27,7 @@ POPULATE_STATE(test3, test_entry, NULL,
     TRAN(2, test_action, test_guard, test2)
 );
 
-static state_m_t statem = { .state = &state_test, .data = NULL };
+static state_machine_t statem = { .state = &state_test, .data = NULL };
 
 int main() {
     dispatch(&statem, 1);
