@@ -7,34 +7,43 @@ void test_entry(void *data) { printf("%s\n", __func__); }
 void test_exit(void *data) { printf("%s\n", __func__); }
 void test_action(void *data) { printf("%s\n", __func__); }
 bool test_guard(void *data) { printf("%s\n", __func__); return true; }
+bool test_guard_false(void *data) { printf("%s\n", __func__); return false; }
 
-DEFINE_STATE(test);
-DEFINE_STATE(test2);
-DEFINE_STATE(test3);
+DEFINE_STATE(s1);
+DEFINE_STATE(s2);
+DEFINE_STATE(s3);
 
-POPULATE_STATE(test, test_entry, test_exit,
-    TRAN(2, test_action, test_guard, test2),
-    TRAN(4, NULL, NULL, test)
+POPULATE_STATE(s1, test_entry, test_exit,
+    TRAN(1, test_action, test_guard, s2),
+    TRAN(3, test_action, test_guard_false, s1),
+    TRAN(2, test_action, test_guard, s1),
+    TRAN(3, test_action, test_guard, s3),
+
 );
 
-POPULATE_STATE(test2, NULL, test_exit,
-    TRAN(1, test_action, test_guard, test3),
-    TRAN(3, NULL, test_guard, test),
-    TRAN(50, test_action, NULL, test2)
+POPULATE_STATE(s2, test_entry, test_exit,
+    TRAN(1, test_action, test_guard, s3),
+    TRAN(2, test_action, test_guard, s2),
+    TRAN(3, test_action, test_guard, s1)
 );
 
-POPULATE_STATE(test3, test_entry, NULL,
-    TRAN(2, test_action, test_guard, test2)
+POPULATE_STATE(s3, NULL, NULL,
+    TRAN(1, NULL, NULL, s1),
+    TRAN(2, test_action, NULL, s3),
+    TRAN(3, NULL, NULL, s2)
 );
 
-static state_machine_t statem = { .state = &state_test, .data = NULL };
+DEFINE_STATEM(machine, s1, NULL);
 
 int main() {
-    dispatch(&statem, 1);
-    dispatch(&statem, 2);
-    dispatch(&statem, 2);
-    dispatch(&statem, 4);
-    dispatch(&statem, 3);
+
+    while (1) {
+        printf("Event: ");
+
+        int event;
+        scanf("%d", &event);
+        dispatch(&machine, event);
+    }
 
     return EXIT_SUCCESS;
 }

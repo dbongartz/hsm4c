@@ -11,8 +11,12 @@ void dispatch(state_machine_t *statem, int event) {
     const tran_t *t = &s->tran_list[i];
 
     if (t->event == event) {
-      if (t->guard_fn && !t->guard_fn(statem->data))
+      printf("sm: Try handling event %d in %s at transition %d\n",
+          event, s->name, (int)i);
+
+      if (t->guard_fn && !t->guard_fn(statem->data)) {
         continue;
+      }
 
       if (s->exit_fn)
         s->exit_fn(statem->data);
@@ -20,7 +24,9 @@ void dispatch(state_machine_t *statem, int event) {
       if (t->action_fn)
         t->action_fn(statem->data);
 
-      statem->state = t->target_state;;
+      statem->state = t->target_state;
+
+      printf("sm: New state %s\n", statem->state->name);
 
       if (statem->state->entry_fn)
         statem->state->entry_fn(statem->data);
@@ -28,4 +34,6 @@ void dispatch(state_machine_t *statem, int event) {
       return;
     }
   }
+
+  printf("sm: Event %d not handled\n", event);
 }
