@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <assert.h>
 
+#define INTERNAL_SELF_TRANSITION NULL
+
 void dispatch(state_machine_t *statem, int event) {
   assert(statem);
 
@@ -18,17 +20,18 @@ void dispatch(state_machine_t *statem, int event) {
         continue;
       }
 
-      if (s->exit_fn)
+      if (s->exit_fn && t->target_state != INTERNAL_SELF_TRANSITION)
         s->exit_fn(statem->data);
 
       if (t->action_fn)
         t->action_fn(statem->data);
 
-      statem->state = t->target_state;
+      if (t->target_state != NULL)
+        statem->state = t->target_state;
 
       printf("sm: New state %s\n", statem->state->name);
 
-      if (statem->state->entry_fn)
+      if (statem->state->entry_fn && t->target_state != NULL)
         statem->state->entry_fn(statem->data);
 
       return;

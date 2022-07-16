@@ -7,11 +7,11 @@ enable_testing()
 add_subdirectory(src)
 add_subdirectory(lib)
 
-
+add_compile_options(-O3)
 add_compile_options(-Wall -Wextra -pedantic)
 
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE INTERNAL "")
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)

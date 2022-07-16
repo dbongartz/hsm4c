@@ -28,19 +28,21 @@ struct transition {
     const state_t *target_state;
 };
 
-#define STATE_NAME(name) state_##name
+#define STATE_NAME(name) name
 
-#define DEFINE_STATE(name) static const state_t STATE_NAME(name);
+#define DECLARE_STATE(name) const state_t STATE_NAME(name);
 
-#define TRAN(event, action, guard, state) { \
-    event, action, guard, &STATE_NAME(state) }
+#define TRAN(event, action, guard, state_ptr) { \
+    event, action, guard, state_ptr }
 
-#define POPULATE_STATE(staten, entry, exit, tran, ...) \
-static const tran_t tran_list_##staten[] = { tran, __VA_ARGS__ }; \
-static const state_t STATE_NAME(staten) = { \
-    .name = #staten, \
-    .tran_list = tran_list_##staten, \
-    .tran_list_size = sizeof(tran_list_##staten) / sizeof(tran_list_##staten[0]), \
+#define TRAN_INTERNAL(event, action, guard) TRAN(event, action, guard, NULL)
+
+#define POPULATE_STATE(state_name, entry, exit, tran, ...) \
+const tran_t tran_list_##state_name[] = { tran, __VA_ARGS__ }; \
+const state_t state_name = { \
+    .name = #state_name, \
+    .tran_list = tran_list_##state_name, \
+    .tran_list_size = sizeof(tran_list_##state_name) / sizeof(tran_list_##state_name[0]), \
     .entry_fn = entry, \
     .exit_fn = exit, \
 }

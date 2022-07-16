@@ -1,4 +1,8 @@
 {
     "cmake.configureOnOpen": false,
-    "clangd.arguments": ["-pretty", "--background-index", "--compile-commands-dir=build"]
+    "clangd.arguments": [
+        "-pretty",
+        "--background-index",
+    ],
+    "ceedlingExplorer.debugConfiguration": "Ceedling Test Explorer Debug"
 }
