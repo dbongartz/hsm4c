@@ -1,48 +1,174 @@
-#include <stdlib.h>
+#include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 
-#include "hsm4c.h"
+typedef struct State State;
+typedef struct Transition Transition;
 
-void test_entry(void *data) { printf("%s\n", __func__); }
-void test_exit(void *data) { printf("%s\n", __func__); }
-void test_action(void *data) { printf("%s\n", __func__); }
-bool test_guard(void *data) { printf("%s\n", __func__); return true; }
-bool test_guard_false(void *data) { printf("%s\n", __func__); return false; }
+typedef void (*entry_fn)(State *sm);
+typedef void (*exit_fn)(State *sm);
+typedef void (*transition_fn)(State *sm);
+typedef bool (*guard_fn)(State *sm);
 
-DECLARE_STATE(s1);
-DECLARE_STATE(s2);
-DECLARE_STATE(s3);
+struct State {
+  entry_fn const entry_fn;
+  exit_fn const exit_fn;
+  State *const parent;
+  State *const initial;
+  State *current;
+};
 
-POPULATE_STATE(s1, test_entry, test_exit,
-    TRAN(1, test_action, test_guard, &s2),
-    TRAN(3, test_action, test_guard_false, &s1),
-    TRAN(2, test_action, test_guard, &s1),
-    TRAN(3, test_action, test_guard, &s3),
-);
+struct Transition {
+  State *const from;
+  State *const to;
+  int const event;
+  bool history;
+  transition_fn const transition_fn;
+  guard_fn const guard_fn;
+};
 
-POPULATE_STATE(s2, test_entry, test_exit,
-    TRAN(1, test_action, test_guard, &s3),
-    TRAN(2, test_action, test_guard, &s2),
-    TRAN(3, test_action, test_guard, &s1)
-);
+// struct StateMachine {
+//   State *const initial;
+//   State *current;
 
-POPULATE_STATE(s3, NULL, NULL,
-    TRAN(1, NULL, NULL, &s1),
-    TRAN(2, test_action, NULL, &s3),
-    TRAN(3, NULL, NULL, &s2)
-);
+//   Transition const *const transitions;
+// };
 
-DEFINE_STATEM(machine, s1, NULL);
-
-int main() {
-
-    while (1) {
-        printf("Event: ");
-
-        int event;
-        scanf("%d", &event);
-        dispatch(&machine, event);
+State *fca(State const *left, State const *right) {
+  for (; left->parent != NULL; left = left->parent) {
+    for (; right->parent != NULL; right = right->parent) {
+      if (left->parent == right->parent) {
+        return left->parent;
+      }
     }
+  }
+  return NULL;
+}
 
-    return EXIT_SUCCESS;
+void walk_up_exit(State *sm, State const *node, State const *ancestor) {
+  for (; node != ancestor; node = node->parent) {
+    node->exit_fn(sm);
+  }
+}
+
+void walk_up_set_current(State *sm, State *node, State const *ancestor) {
+  for (; node != ancestor; node = node->parent) {
+    node->parent->current = node;
+  }
+}
+
+void walk_down_entry(State *sm, State const *node, State const *child) {
+  for (; node != child; node = node->current) {
+    node->current->entry_fn(sm);
+  }
+}
+
+State *sm_run(State *current, Transition transitions[], int event) {
+  for (Transition const *t = transitions; t->from != NULL; ++t) {
+    if (t->from == current) {
+      if (t->event == event) {
+        if (t->guard_fn(current)) {
+          State *ca = fca(t->from, t->to);
+
+          walk_up_exit(current, t->from, ca);
+          walk_up_set_current(current, t->to, ca);
+
+          if (t->transition_fn)
+            t->transition_fn(current);
+
+          walk_down_entry(current, ca, t->to);
+
+          if (t->history) {
+            t->to->current = t->to->initial;
+          }
+
+          return t->to->current ? t->to->current : t->to;
+        }
+      }
+    }
+  }
+
+  return current;
+}
+
+/* ========================== */
+
+void state_a_entry(State *sm) { printf("%s\n", __func__); }
+void state_a_exit(State *sm) { printf("%s\n", __func__); }
+void state_b_entry(State *sm) { printf("%s\n", __func__); }
+void state_b_exit(State *sm) { printf("%s\n", __func__); }
+void tran_1(State *sm) { printf("%s\n", __func__); }
+void tran_2(State *sm) { printf("%s\n", __func__); }
+bool guard_1(State *sm) {
+  printf("%s\n", __func__);
+  return true;
+}
+bool guard_2(State *sm) {
+  printf("%s\n", __func__);
+  return true;
+}
+
+struct MyStateA my_state_a;
+struct MyStateB my_state_b;
+
+struct MyRoot {
+  State const _state;
+
+  char my_char;
+} my_sm = {
+    ._state = {.entry_fn = NULL,
+               .exit_fn = NULL,
+               .current = (State *)&my_state_a,
+               .initial = (State *)&my_state_a,
+               .parent = NULL},
+    .my_char = 'a',
+};
+
+struct MyStateA {
+  State const _state;
+
+  int my_int;
+} my_state_a = {
+    ._state = {.entry_fn = state_a_entry,
+               .exit_fn = state_a_exit,
+               .current = NULL,
+               .initial = NULL,
+               .parent = (State *)&my_sm},
+    .my_int = 42,
+};
+
+struct MyStateB {
+  State const _state;
+
+  char my_char;
+} my_state_b = {
+    ._state = {.entry_fn = state_b_entry,
+               .exit_fn = state_b_exit,
+               .current = NULL,
+               .initial = NULL,
+               .parent = (State *)&my_sm},
+    .my_char = 'a',
+};
+
+Transition transitions[] = {{.from = (State *)&my_state_a,
+                             .to = (State *)&my_state_b,
+                             .event = 1,
+                             .guard_fn = guard_1,
+                             .transition_fn = tran_1},
+
+                            {.from = (State *)&my_state_b,
+                             .to = (State *)&my_state_a,
+                             .event = 2,
+                             .guard_fn = guard_2,
+                             .transition_fn = tran_2},
+
+                            {}};
+
+int main(void) {
+  State *current = my_sm._state.initial;
+  current = sm_run(current, transitions, 1);
+  current = sm_run(current, transitions, 2);
+  current = sm_run(current, transitions, 2);
+  current = sm_run(current, transitions, 1);
+  current = sm_run(current, transitions, 2);
 }

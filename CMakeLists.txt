@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.0)
-project(hsm4c VERSION 0.1.0)
+project(hsm4c VERSION 0.1.0 LANGUAGES C)
 
 include(CTest)
 enable_testing()
