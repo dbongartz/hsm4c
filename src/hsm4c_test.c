@@ -36,10 +36,8 @@ struct Transition {
 };
 
 State *fca(State const *const left, State const *const right) {
-  for (State const *_left = left; _left->parent != NULL;
-       _left = _left->parent) {
-    for (State const *_right = right; _right->parent != NULL;
-         _right = _right->parent) {
+  for (State const *_left = left; _left->parent != NULL; _left = _left->parent) {
+    for (State const *_right = right; _right->parent != NULL; _right = _right->parent) {
       if (_left->parent == _right->parent) {
         return _left->parent;
       }
@@ -182,7 +180,7 @@ struct MyRoot {
                .exit_fn = NULL,
                .parent = NULL,
                .initial = (State *)&my_state_a,
-               .current = (State *)&my_state_a},
+               .current = NULL},
     .my_char = 'a',
 };
 
@@ -195,7 +193,7 @@ struct MyStateA {
                .exit_fn = state_a_exit,
                .parent = (State *)&my_sm,
                .initial = (State *)&my_state_c,
-               .current = (State *)&my_state_c},
+               .current = NULL},
     .my_int = 42,
 };
 
@@ -234,7 +232,7 @@ struct MyStateD {
                .exit_fn = state_d_exit,
                .parent = (State *)&my_state_a,
                .initial = (State *)&my_state_e,
-               .current = (State *)&my_state_e},
+               .current = NULL},
     .my_char = 'a',
 };
 
@@ -262,24 +260,11 @@ struct MyStateF {
 
 static Transition const transitions[] = {
     {(State *)&my_state_a, (State *)&my_state_b, 1, tran_1, guard_1},
-
     {(State *)&my_state_b, (State *)&my_state_a, 2, tran_2, guard_2},
-
     {(State *)&my_state_b, (State *)&my_state_a, 3, tran_2, guard_2, HSM_HISTORY},
-
     {(State *)&my_state_c, (State *)&my_state_d, 4, NULL, NULL, HSM_HISTORY},
-
     {(State *)&my_state_e, (State *)&my_state_f, 5, NULL, NULL, HSM_HISTORY},
-
-    {
-        (State *)&my_state_b,
-        (State *)&my_state_a,
-        6,
-        tran_2,
-        guard_2,
-        HSM_HISTORY_DEEP,
-    },
-
+    {(State *)&my_state_b, (State *)&my_state_a, 6, tran_2, guard_2, HSM_HISTORY_DEEP},
     {},
 };
 
@@ -294,7 +279,7 @@ int main(void) {
   current = sm_run((State *)&my_sm, transitions, 5); // A->D->F
   current = sm_run((State *)&my_sm, transitions, 1); // B
   current = sm_run((State *)&my_sm, transitions,
-                   3); // A->D->E (history of A, not of D)
+                   3);                               // A->D->E (history of A, not of D)
   current = sm_run((State *)&my_sm, transitions, 5); // A->D->F
   current = sm_run((State *)&my_sm, transitions, 1); // B
   current = sm_run((State *)&my_sm, transitions,
