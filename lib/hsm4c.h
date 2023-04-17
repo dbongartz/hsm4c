@@ -1,64 +1,54 @@
 #ifndef __HSM4C__H__
 #define __HSM4C__H__
 
-#include <stddef.h>
+// #include <stddef.h>
 #include <stdbool.h>
 
-typedef struct state_machine state_machine_t;
-typedef struct state state_t;
-typedef struct transition tran_t;
+typedef struct State State;
+typedef struct Transition Transition;
+typedef enum StateType StateType;
+typedef int EventType;
 
-struct state_machine {
-    const state_t *state;
-    void *data;
+typedef void (*entry_fn)(State const *sm);
+typedef State *(*run_fn)(State const *sm, EventType e);
+typedef void (*exit_fn)(State const *sm);
+typedef void (*transition_fn)(State const *sm);
+typedef bool (*guard_fn)(State const *sm);
+
+#define SC_TRANSITIONS_END ((Transition const){})
+
+#define SC_NO_EVENT ((EventType)0)
+
+enum StateType {
+  SC_TYPE_NORMAL = 0,
+  SC_TYPE_HISTORY,
+  SC_TYPE_HISTORY_DEEP,
+  SC_TYPE_ROOT,
 };
 
-struct state {
-    char *name;
-    void (*entry_fn)(void *data);
-    void (*exit_fn)(void *data);
-    const tran_t *tran_list;
-    const size_t tran_list_size;
+struct State {
+  char const *name;
+  entry_fn const entry_fn;
+  run_fn const run_fn;
+  exit_fn const exit_fn;
+  State *const parent;
+  State *const initial;
+  StateType type;
+
+  /* Private */
+  /** \brief Active child state. On root node this is always a leaf */
+  State *_active;
 };
 
-struct transition {
-    const int event;
-    void (*action_fn)(void *data);
-    bool (*guard_fn)(void *data);
-    const state_t *target_state;
+struct Transition {
+  State *const from;
+  State *const to;
+  int const event;
+  transition_fn const transition_fn;
+  guard_fn const guard_fn;
 };
 
-#define STATE_NAME(name) name
-
-#define DECLARE_STATE(name) const state_t STATE_NAME(name);
-
-#define TRAN(event, action, guard, state_ptr) { \
-    event, action, guard, state_ptr }
-
-#define TRAN_INTERNAL(event, action, guard) TRAN(event, action, guard, NULL)
-
-#define POPULATE_STATE(state_name, entry, exit, tran, ...) \
-const tran_t tran_list_##state_name[] = { tran, __VA_ARGS__ }; \
-const state_t state_name = { \
-    .name = #state_name, \
-    .tran_list = tran_list_##state_name, \
-    .tran_list_size = sizeof(tran_list_##state_name) / sizeof(tran_list_##state_name[0]), \
-    .entry_fn = entry, \
-    .exit_fn = exit, \
-}
-
-#define DEFINE_STATEM(name, initial_state, user_data_ptr) \
-state_machine_t name = { .state = &STATE_NAME(initial_state), .data = user_data_ptr }
-
-
-/**
- * @brief Dispatch an event to the statemachine
- *
- * The state machine will return after "Run to completion"
- *
- * @param statem statemachine pointer
- * @param event event to dispatch
- */
-void dispatch(state_machine_t *statem, int event);
+State *sc_init(State *root_state);
+State const *sc_run(State *root, Transition const transitions[], EventType event);
 
 #endif
