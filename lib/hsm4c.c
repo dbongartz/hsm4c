@@ -3,6 +3,7 @@
  * \file
  *
  * (C) 2023 David Bongartz
+ * MIT License
  */
 
 #include "hsm4c.h"
