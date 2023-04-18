@@ -1,3 +1,4 @@
+#include "support_fns.h"
 #include "unity.h"
 
 #include <stdio.h>
@@ -6,255 +7,530 @@
 
 #include "../lib/hsm4c.h"
 
+#include "mock_support_fns.h"
+// #include "support_fns.h"
+
 #define ARRAY_LEN(a) (sizeof(a) / sizeof(*a))
 
-enum action_type {
-  ACTION_NULL,
-  ACTION_ENTRY,
-  ACTION_EXIT,
-  ACTION_TRANSITION,
-  ACTION_GUARD_OK,
-  ACTION_GUARD_FAIL,
+/* -------- TEST FIXTURE -------- */
+
+static bool t_choice_A_return = false;
+static int t_choice_A_called = 0;
+static bool t_choice_B_return = false;
+static int t_choice_B_called = 0;
+
+static void reset_choice_A(void) {
+  t_choice_A_return = false;
+  t_choice_A_called = 0;
+}
+
+static void reset_choice_B(void) {
+  t_choice_B_return = false;
+  t_choice_B_called = 0;
+}
+
+void reset_all_states(size_t num_states, State states[num_states]) {
+  for (size_t i = 0; i < num_states; ++i) {
+    sc_reset_state(&states[i]);
+  }
+}
+
+static bool t_choice_A(State const *s) {
+  t_choice_A_called++;
+  return t_choice_A_return;
+}
+
+static bool t_choice_B(State const *s) {
+  t_choice_B_called++;
+  return t_choice_B_return;
+}
+
+static void ignore_state_and_transition_fn(void) {
+  s_entry_Ignore();
+  s_exit_Ignore();
+  s_run_IgnoreAndReturn(NULL);
+  t_action_Ignore();
+  t_guard_IgnoreAndReturn(true);
+}
+
+static void stop_ignore_state_and_transition_fn(void) {
+  s_entry_StopIgnore();
+  s_exit_StopIgnore();
+  s_run_StopIgnore();
+  t_action_StopIgnore();
+  t_guard_StopIgnore();
+}
+
+enum states { ROOT, A, B, C, AA, AB, AC, BA, BB, BC, AAA, AAB, A_H, A_DH, A_CHOICE, B_H };
+State states[] = {
+    [ROOT] =
+        {
+            .name = "ROOT",
+            .entry_fn = s_entry,
+            .exit_fn = s_exit,
+            .run_fn = s_run,
+            .initial = &states[A],
+            .type = SC_TYPE_ROOT,
+        },
+    [A] =
+        {
+            .name = "A",
+            .entry_fn = s_entry,
+            .exit_fn = s_exit,
+            .run_fn = s_run,
+            .parent = &states[ROOT],
+            .initial = &states[AA],
+            .type = SC_TYPE_NORMAL,
+        },
+    [B] =
+        {
+            .name = "B",
+            .entry_fn = s_entry,
+            .exit_fn = s_exit,
+            .run_fn = s_run,
+            .parent = &states[ROOT],
+            .initial = &states[BA],
+            .type = SC_TYPE_NORMAL,
+        },
+    [C] =
+        {
+            .name = "C",
+            .entry_fn = s_entry,
+            .exit_fn = s_exit,
+            .run_fn = s_run,
+            .parent = &states[ROOT],
+            .type = SC_TYPE_NORMAL,
+        },
+    [AA] =
+        {
+            .name = "AA",
+            .entry_fn = s_entry,
+            .exit_fn = s_exit,
+            .run_fn = s_run,
+            .parent = &states[A],
+            .initial = &states[AAA],
+            .type = SC_TYPE_NORMAL,
+        },
+    [AB] =
+        {
+            .name = "AB",
+            .entry_fn = s_entry,
+            .exit_fn = s_exit,
+            .run_fn = s_run,
+            .parent = &states[A],
+            .type = SC_TYPE_NORMAL,
+        },
+    [AC] =
+        {
+            .name = "AC",
+            .entry_fn = s_entry,
+            .exit_fn = s_exit,
+            .run_fn = s_run,
+            .parent = &states[A],
+            .type = SC_TYPE_NORMAL,
+        },
+    [BA] =
+        {
+            .name = "BA",
+            .entry_fn = s_entry,
+            .exit_fn = s_exit,
+            .run_fn = s_run,
+            .parent = &states[B],
+            .type = SC_TYPE_NORMAL,
+        },
+    [BB] =
+        {
+            .name = "BB",
+            .entry_fn = s_entry,
+            .exit_fn = s_exit,
+            .run_fn = s_run,
+            .parent = &states[B],
+            .type = SC_TYPE_NORMAL,
+        },
+    [BC] =
+        {
+            .name = "BC",
+            .entry_fn = s_entry,
+            .exit_fn = s_exit,
+            .run_fn = s_run,
+            .parent = &states[B],
+            .type = SC_TYPE_NORMAL,
+        },
+    [AAA] =
+        {
+            .name = "AAA",
+            .entry_fn = s_entry,
+            .exit_fn = s_exit,
+            .run_fn = s_run,
+            .parent = &states[AA],
+            .type = SC_TYPE_NORMAL,
+        },
+    [AAB] =
+        {
+            .name = "AAB",
+            .entry_fn = s_entry,
+            .exit_fn = s_exit,
+            .run_fn = s_run,
+            .parent = &states[AA],
+            .type = SC_TYPE_NORMAL,
+        },
+    [A_H] =
+        {
+            .name = "A_H",
+            .parent = &states[A],
+            .initial = &states[AB],
+            .type = SC_TYPE_HISTORY,
+        },
+    [B_H] =
+        {
+            .name = "B_H",
+            .parent = &states[B],
+            .initial = &states[BC],
+            .type = SC_TYPE_HISTORY,
+        },
+    [A_DH] =
+        {
+            .name = "A_HP",
+            .parent = &states[A],
+            .initial = &states[AC],
+            .type = SC_TYPE_HISTORY_DEEP,
+        },
+    [A_CHOICE] =
+        {
+            .name = "A_CHOICE",
+            .parent = &states[A],
+            .type = SC_TYPE_CHOICE,
+        },
 };
 
-struct action {
-  enum action_type type;
-  char *data;
+enum events { EV_NO_EVENT = SC_NO_EVENT, EV_1, EV_2, EV_3, EV_4, EV_5, EV_6, EV_7 };
+static Transition const transitions[] = {
+    {&states[A], &states[B], EV_1, t_action, t_guard},
+    {&states[B], &states[A], EV_1, t_action, t_guard},
+    {&states[A], &states[BB], EV_2, t_action, t_guard},
+    {&states[AA], &states[AB], EV_3, t_action, t_guard},
+    {&states[AB], &states[B], EV_3, t_action, t_guard},
+    {&states[B], &states[A_H], EV_3, t_action, t_guard},
+    {&states[AAA], &states[AAB], EV_4, t_action, t_guard},
+    {&states[AA], &states[B], EV_4, t_action, t_guard},
+    {&states[B], &states[A_H], EV_4, t_action, t_guard},
+    {&states[B], &states[A_DH], EV_5, t_action, t_guard},
+    {&states[AA], &states[A_CHOICE], EV_6, t_action, t_guard},
+    {&states[A_CHOICE], &states[B], EV_NO_EVENT, t_action, t_choice_A},
+    {&states[A_CHOICE], &states[C], EV_NO_EVENT, t_action, t_choice_B},
+    {&states[A], &states[B_H], EV_7, t_action, t_guard},
+    SC_TRANSITIONS_END,
 };
-
-static struct action action_order_buffer[30] = {};
-static size_t action_order_nr = 0;
-
-void s_entry(void *data) {
-  fflush(stdout);
-  action_order_buffer[action_order_nr].type = ACTION_ENTRY;
-  action_order_nr++;
-}
-void s_exit(void *data) {
-  action_order_buffer[action_order_nr].type = ACTION_EXIT;
-  action_order_nr++;
-}
-void t_action(void *data) {
-  action_order_buffer[action_order_nr].type = ACTION_TRANSITION;
-  action_order_nr++;
-}
-bool t_guard_ok(void *e) {
-  action_order_buffer[action_order_nr].type = ACTION_GUARD_OK;
-  action_order_nr++;
-  return true;
-}
-
-bool t_guard_fail(void *e) {
-  action_order_buffer[action_order_nr].type = ACTION_GUARD_FAIL;
-  action_order_nr++;
-  return false;
-}
-
-enum events {
-  EV_NEXT,
-  EV_PREV,
-  EV_SELF_INTERNAL,
-  EV_SELF_EXTERNAL,
-  EV_GUARD_NEXT,
-  EV_NOT_USED
-};
-
-DECLARE_STATE(s1);
-DECLARE_STATE(s2);
-DECLARE_STATE(s3);
-
-POPULATE_STATE(s1, s_entry, s_exit,
-               TRAN(EV_NEXT, t_action, t_guard_ok, &s2),
-               TRAN(EV_PREV, t_action, t_guard_ok, &s3),
-               TRAN_INTERNAL(EV_SELF_INTERNAL, t_action, t_guard_ok),
-               TRAN(EV_SELF_EXTERNAL, t_action, t_guard_ok, &s1),
-               TRAN(EV_NEXT, t_action, t_guard_ok,
-                    &s1), // Should never be reached
-               TRAN(EV_GUARD_NEXT, t_action, t_guard_fail,
-                    &s1), // Should never be executed
-               TRAN(EV_GUARD_NEXT, t_action, t_guard_ok, &s2), );
-
-POPULATE_STATE(s2, s_entry, s_exit,
-               TRAN(EV_NEXT, t_action, t_guard_ok, &s3),
-               TRAN(EV_PREV, t_action, t_guard_ok, &s1),
-               TRAN_INTERNAL(EV_SELF_INTERNAL, t_action, t_guard_ok),
-               TRAN(EV_SELF_EXTERNAL, t_action, t_guard_ok, &s2),
-               TRAN(EV_NEXT, t_action, t_guard_ok,
-                    &s2), // Should never be reached
-               TRAN(EV_GUARD_NEXT, t_action, t_guard_fail,
-                    &s2), // Should never be executed
-               TRAN(EV_GUARD_NEXT, t_action, t_guard_ok, &s3), );
-
-POPULATE_STATE(s3, s_entry, s_exit,
-               TRAN(EV_NEXT, t_action, t_guard_ok, &s1),
-               TRAN(EV_PREV, t_action, t_guard_ok, &s2),
-               TRAN_INTERNAL(EV_SELF_INTERNAL, t_action, t_guard_ok),
-               TRAN(EV_SELF_EXTERNAL, t_action, t_guard_ok, &s3),
-               TRAN(EV_NEXT, t_action, t_guard_ok,
-                    &s3), // Should never be reached
-               TRAN(EV_GUARD_NEXT, t_action, t_guard_fail,
-                    &s3), // Should never be executed
-               TRAN(EV_GUARD_NEXT, t_action, t_guard_ok, &s1), );
-
-DEFINE_STATEM(machine, s1, NULL);
-
-void test_s1_not_used_should_be_ignored(void) {
-  struct action action_order_expected[] = {{ACTION_NULL}};
-
-  dispatch(&machine, EV_NOT_USED);
-  TEST_ASSERT_EQUAL_STRING(STATE_NAME(s1).name, machine.state->name);
-  TEST_ASSERT_EQUAL_INT8_ARRAY(action_order_expected, action_order_buffer,
-                               ARRAY_LEN(action_order_expected));
-}
-
-void test_s1_next_should_be_s2(void) {
-  struct action action_order_expected[] = {{ACTION_GUARD_OK},
-                                           {ACTION_EXIT},
-                                           {ACTION_TRANSITION},
-                                           {ACTION_ENTRY},
-                                           {ACTION_NULL}};
-
-  dispatch(&machine, EV_NEXT);
-  TEST_ASSERT_EQUAL_STRING(STATE_NAME(s2).name, machine.state->name);
-  TEST_ASSERT_EQUAL_INT8_ARRAY(action_order_expected, action_order_buffer,
-                               ARRAY_LEN(action_order_expected));
-}
-
-void test_s1_self_internal_should_be_s1_no_exit_entry(void) {
-  struct action action_order_expected[] = {{ACTION_GUARD_OK},
-                                           {ACTION_TRANSITION},
-                                           {ACTION_NULL}};
-
-  dispatch(&machine, EV_SELF_INTERNAL);
-  TEST_ASSERT_EQUAL_STRING(STATE_NAME(s1).name, machine.state->name);
-  TEST_ASSERT_EQUAL_INT8_ARRAY(action_order_expected, action_order_buffer,
-                               ARRAY_LEN(action_order_expected));
-}
-
-void test_s1_self_external_should_be_s1_with_exit_entry(void) {
-  struct action action_order_expected[] = {{ACTION_GUARD_OK},
-                                           {ACTION_EXIT},
-                                           {ACTION_TRANSITION},
-                                           {ACTION_ENTRY},
-                                           {ACTION_NULL}};
-
-  dispatch(&machine, EV_SELF_EXTERNAL);
-  TEST_ASSERT_EQUAL_STRING(STATE_NAME(s1).name, machine.state->name);
-  TEST_ASSERT_EQUAL_INT8_ARRAY(action_order_expected, action_order_buffer,
-                               ARRAY_LEN(action_order_expected));
-}
-
-void test_s1_next_next_should_be_s3(void) {
-  struct action action_order_expected_1[] = {{ACTION_GUARD_OK},
-                                             {ACTION_EXIT},
-                                             {ACTION_TRANSITION},
-                                             {ACTION_ENTRY},
-                                             {ACTION_NULL}};
-
-  dispatch(&machine, EV_NEXT);
-  TEST_ASSERT_EQUAL_STRING(STATE_NAME(s2).name, machine.state->name);
-  TEST_ASSERT_EQUAL_INT8_ARRAY(action_order_expected_1, action_order_buffer,
-                               ARRAY_LEN(action_order_expected_1));
-
-  struct action action_order_expected_2[] = {
-      {ACTION_GUARD_OK},   {ACTION_EXIT},     {ACTION_TRANSITION},
-      {ACTION_ENTRY},      {ACTION_GUARD_OK}, {ACTION_EXIT},
-      {ACTION_TRANSITION}, {ACTION_ENTRY},    {ACTION_NULL}};
-
-  dispatch(&machine, EV_NEXT);
-  TEST_ASSERT_EQUAL_STRING(STATE_NAME(s3).name, machine.state->name);
-  TEST_ASSERT_EQUAL_INT8_ARRAY(action_order_expected_2, action_order_buffer,
-                               ARRAY_LEN(action_order_expected_2));
-}
-
-void test_s1_guard_next_should_be_s1(void) {
-  struct action action_order_expected[] = {{ACTION_GUARD_FAIL},
-                                           {ACTION_GUARD_OK},
-                                           {ACTION_EXIT},
-                                           {ACTION_TRANSITION},
-                                           {ACTION_ENTRY},
-                                           {ACTION_NULL}};
-
-  dispatch(&machine, EV_GUARD_NEXT);
-  TEST_ASSERT_EQUAL_STRING(STATE_NAME(s2).name, machine.state->name);
-  TEST_ASSERT_EQUAL_INT8_ARRAY(action_order_expected, action_order_buffer,
-                               ARRAY_LEN(action_order_expected));
-}
-
-/* --------- NULL tests --------- */
-
-DECLARE_STATE(s1_null);
-DECLARE_STATE(s2_null);
-DECLARE_STATE(s3_null);
-
-POPULATE_STATE(s1_null, NULL, NULL,
-               TRAN(EV_NEXT, NULL, NULL, &s2_null),
-               TRAN(EV_PREV, NULL, NULL, &s3_null),
-               TRAN_INTERNAL(EV_SELF_INTERNAL, NULL, NULL),
-               TRAN(EV_SELF_EXTERNAL, NULL, NULL, &s1_null), );
-
-POPULATE_STATE(s2_null, NULL, NULL,
-               TRAN(EV_NEXT, NULL, NULL, &s3_null),
-               TRAN(EV_PREV, NULL, NULL, &s1_null),
-               TRAN_INTERNAL(EV_SELF_INTERNAL, NULL, NULL),
-               TRAN(EV_SELF_EXTERNAL, NULL, NULL, &s2_null), );
-
-POPULATE_STATE(s3_null, NULL, NULL,
-               TRAN(EV_NEXT, NULL, NULL, &s1_null),
-               TRAN(EV_PREV, NULL, NULL, &s2_null),
-               TRAN_INTERNAL(EV_SELF_INTERNAL, NULL, NULL),
-               TRAN(EV_SELF_EXTERNAL, NULL, NULL, &s3_null), );
-
-DEFINE_STATEM(machine_null, s1_null, NULL);
-
-void test_s1_null_3x_next_should_be_s1_null_with_no_actions(void) {
-  struct action action_order_expected[] = {
-      {ACTION_NULL},
-  };
-
-  dispatch(&machine_null, EV_NEXT);
-  TEST_ASSERT_EQUAL_STRING(STATE_NAME(s2_null).name, machine_null.state->name);
-  TEST_ASSERT_EQUAL_INT8_ARRAY(action_order_expected, action_order_buffer,
-                               ARRAY_LEN(action_order_expected));
-
-  dispatch(&machine_null, EV_NEXT);
-  TEST_ASSERT_EQUAL_STRING(STATE_NAME(s3_null).name, machine_null.state->name);
-  TEST_ASSERT_EQUAL_INT8_ARRAY(action_order_expected, action_order_buffer,
-                               ARRAY_LEN(action_order_expected));
-
-  dispatch(&machine_null, EV_NEXT);
-  TEST_ASSERT_EQUAL_STRING(STATE_NAME(s1_null).name, machine_null.state->name);
-  TEST_ASSERT_EQUAL_INT8_ARRAY(action_order_expected, action_order_buffer,
-                               ARRAY_LEN(action_order_expected));
-}
-
-void test_s1_null_3x_prev_should_be_s1_null_with_no_actions(void) {
-  struct action action_order_expected[] = {
-      {ACTION_NULL},
-  };
-
-  dispatch(&machine_null, EV_PREV);
-  TEST_ASSERT_EQUAL_STRING(STATE_NAME(s3_null).name, machine_null.state->name);
-  TEST_ASSERT_EQUAL_INT8_ARRAY(action_order_expected, action_order_buffer,
-                               ARRAY_LEN(action_order_expected));
-
-  dispatch(&machine_null, EV_PREV);
-  TEST_ASSERT_EQUAL_STRING(STATE_NAME(s2_null).name, machine_null.state->name);
-  TEST_ASSERT_EQUAL_INT8_ARRAY(action_order_expected, action_order_buffer,
-                               ARRAY_LEN(action_order_expected));
-
-  dispatch(&machine_null, EV_PREV);
-  TEST_ASSERT_EQUAL_STRING(STATE_NAME(s1_null).name, machine_null.state->name);
-  TEST_ASSERT_EQUAL_INT8_ARRAY(action_order_expected, action_order_buffer,
-                               ARRAY_LEN(action_order_expected));
-}
-
 
 void setUp(void) {
-  memset(action_order_buffer, 0, sizeof(action_order_buffer));
-  action_order_nr = 0;
-  machine.state = &s1;
-  machine_null.state = &s1_null;
+  reset_choice_A();
+  reset_choice_B();
+  reset_all_states(ARRAY_LEN(states), states);
 }
 
 void tearDown(void) {}
+
+/* -------- TESTS -------- */
+
+void test_initial(void) {
+  s_entry_Expect(&states[ROOT]);
+  s_entry_Expect(&states[A]);
+  s_entry_Expect(&states[AA]);
+  s_entry_Expect(&states[AAA]);
+
+  sc_init(&states[ROOT], transitions);
+
+  // Double init to check if it resets accordingly
+  s_entry_Expect(&states[ROOT]);
+  s_entry_Expect(&states[A]);
+  s_entry_Expect(&states[AA]);
+  s_entry_Expect(&states[AAA]);
+
+  sc_init(&states[ROOT], transitions);
+}
+
+void test_sc_A_to_B(void) {
+  s_entry_Expect(&states[ROOT]);
+  s_entry_Expect(&states[A]);
+  s_entry_Expect(&states[AA]);
+  s_entry_Expect(&states[AAA]);
+
+  sc_init(&states[ROOT], transitions);
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  s_exit_Expect(&states[AAA]);
+  s_exit_Expect(&states[AA]);
+  s_exit_Expect(&states[A]);
+  t_action_Expect(&states[ROOT]);
+  s_entry_Expect(&states[B]);
+  s_entry_Expect(&states[BA]);
+  s_run_ExpectAndReturn(&states[BA], EV_1, NULL);
+  s_run_ExpectAndReturn(&states[B], EV_1, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_1, NULL);
+
+  sc_run(&states[ROOT], EV_1);
+}
+
+void test_sc_B_to_A(void) {
+  ignore_state_and_transition_fn();
+
+  sc_init(&states[ROOT], transitions);
+  sc_run(&states[ROOT], EV_1);
+
+  stop_ignore_state_and_transition_fn();
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  s_exit_Expect(&states[BA]);
+  s_exit_Expect(&states[B]);
+  t_action_Expect(&states[ROOT]);
+  s_entry_Expect(&states[A]);
+  s_entry_Expect(&states[AA]);
+  s_entry_Expect(&states[AAA]);
+  s_run_ExpectAndReturn(&states[AAA], EV_1, NULL);
+  s_run_ExpectAndReturn(&states[AA], EV_1, NULL);
+  s_run_ExpectAndReturn(&states[A], EV_1, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_1, NULL);
+
+  sc_run(&states[ROOT], EV_1);
+}
+
+void test_sc_A_to_BB(void) {
+  ignore_state_and_transition_fn();
+
+  sc_init(&states[ROOT], transitions);
+  sc_run(&states[ROOT], EV_1);
+  sc_run(&states[ROOT], EV_1);
+
+  stop_ignore_state_and_transition_fn();
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  s_exit_Expect(&states[AAA]);
+  s_exit_Expect(&states[AA]);
+  s_exit_Expect(&states[A]);
+  t_action_Expect(&states[ROOT]);
+  s_entry_Expect(&states[B]);
+  s_entry_Expect(&states[BB]);
+  s_run_ExpectAndReturn(&states[BB], EV_2, NULL);
+  s_run_ExpectAndReturn(&states[B], EV_2, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_2, NULL);
+
+  sc_run(&states[ROOT], EV_2);
+}
+
+void test_sc_AA_to_AB(void) {
+  ignore_state_and_transition_fn();
+
+  sc_init(&states[ROOT], transitions);
+
+  stop_ignore_state_and_transition_fn();
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  s_exit_Expect(&states[AAA]);
+  s_exit_Expect(&states[AA]);
+  t_action_Expect(&states[ROOT]);
+  s_entry_Expect(&states[AB]);
+  s_run_ExpectAndReturn(&states[AB], EV_3, NULL);
+  s_run_ExpectAndReturn(&states[A], EV_3, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_3, NULL);
+
+  sc_run(&states[ROOT], EV_3);
+}
+
+void test_sc_AA_to_AB_to_B_to_A_History(void) {
+  ignore_state_and_transition_fn();
+
+  sc_init(&states[ROOT], transitions);
+  sc_run(&states[ROOT], EV_3);
+  stop_ignore_state_and_transition_fn();
+
+  // Now in A->AB
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  s_exit_Expect(&states[AB]);
+  s_exit_Expect(&states[A]);
+  t_action_Expect(&states[ROOT]);
+  s_entry_Expect(&states[B]);
+  s_entry_Expect(&states[BA]);
+  s_run_ExpectAndReturn(&states[BA], EV_3, NULL);
+  s_run_ExpectAndReturn(&states[B], EV_3, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_3, NULL);
+
+  sc_run(&states[ROOT], EV_3);
+
+  // Now in B with A->AB History. We expect to land back in AB
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  s_exit_Expect(&states[BA]);
+  s_exit_Expect(&states[B]);
+  t_action_Expect(&states[ROOT]);
+  s_entry_Expect(&states[A]);
+  s_entry_Expect(&states[AB]);
+  s_run_ExpectAndReturn(&states[AB], EV_3, NULL);
+  s_run_ExpectAndReturn(&states[A], EV_3, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_3, NULL);
+
+  sc_run(&states[ROOT], EV_3);
+}
+
+void test_sc_AAA_to_AAB(void) {
+  ignore_state_and_transition_fn();
+
+  sc_init(&states[ROOT], transitions);
+  stop_ignore_state_and_transition_fn();
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  s_exit_Expect(&states[AAA]);
+  t_action_Expect(&states[ROOT]);
+  s_entry_Expect(&states[AAB]);
+  s_run_ExpectAndReturn(&states[AAB], EV_4, NULL);
+  s_run_ExpectAndReturn(&states[AA], EV_4, NULL);
+  s_run_ExpectAndReturn(&states[A], EV_4, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_4, NULL);
+
+  sc_run(&states[ROOT], EV_4);
+}
+
+void test_sc_AAA_to_AAB_to_B_to_A_History(void) {
+  ignore_state_and_transition_fn();
+
+  sc_init(&states[ROOT], transitions);
+  sc_run(&states[ROOT], EV_4);
+  // Now in AAB
+  sc_run(&states[ROOT], EV_4);
+  // Now in B with A->AA->AAB History. Expecting AAA
+
+  stop_ignore_state_and_transition_fn();
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  s_exit_Expect(&states[BA]);
+  s_exit_Expect(&states[B]);
+  t_action_Expect(&states[ROOT]);
+  s_entry_Expect(&states[A]);
+  s_entry_Expect(&states[AA]);
+  s_entry_Expect(&states[AAA]);
+  s_run_ExpectAndReturn(&states[AAA], EV_4, NULL);
+  s_run_ExpectAndReturn(&states[AA], EV_4, NULL);
+  s_run_ExpectAndReturn(&states[A], EV_4, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_4, NULL);
+
+  sc_run(&states[ROOT], EV_4);
+}
+
+void test_sc_AAA_to_AAB_to_B_to_A_DeepHistory(void) {
+  ignore_state_and_transition_fn();
+
+  sc_init(&states[ROOT], transitions);
+  sc_run(&states[ROOT], EV_4);
+  // Now in AAB
+  sc_run(&states[ROOT], EV_4);
+  // Now in B with A->AA->AAB Deep History. Expecting AAA.
+
+  stop_ignore_state_and_transition_fn();
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  s_exit_Expect(&states[BA]);
+  s_exit_Expect(&states[B]);
+  t_action_Expect(&states[ROOT]);
+  s_entry_Expect(&states[A]);
+  s_entry_Expect(&states[AA]);
+  s_entry_Expect(&states[AAB]);
+  s_run_ExpectAndReturn(&states[AAB], EV_5, NULL);
+  s_run_ExpectAndReturn(&states[AA], EV_5, NULL);
+  s_run_ExpectAndReturn(&states[A], EV_5, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_5, NULL);
+
+  sc_run(&states[ROOT], EV_5);
+}
+
+void test_sc_A_to_C_choice(void) {
+  ignore_state_and_transition_fn();
+
+  sc_init(&states[ROOT], transitions);
+
+  stop_ignore_state_and_transition_fn();
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  s_exit_Expect(&states[AAA]);
+  s_exit_Expect(&states[AA]);
+  t_action_Expect(&states[ROOT]);
+  s_run_ExpectAndReturn(&states[A], EV_6, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_6, NULL);
+
+  sc_run(&states[ROOT], EV_6);
+
+  TEST_ASSERT_EQUAL_INT(1, t_choice_A_called);
+  TEST_ASSERT_EQUAL_INT(1, t_choice_B_called);
+
+  t_choice_B_return = true;
+  // Should go to C next poll with a non matching or SC_NO_EVENT
+
+  s_exit_Expect(&states[A]);
+  t_action_Expect(&states[ROOT]);
+  s_entry_Expect(&states[C]);
+  s_run_ExpectAndReturn(&states[C], EV_6, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_6, NULL);
+
+  sc_run(&states[ROOT], EV_6);
+}
+
+void test_sc_A_to_B_choice_auto(void) {
+  ignore_state_and_transition_fn();
+
+  sc_init(&states[ROOT], transitions);
+
+  stop_ignore_state_and_transition_fn();
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  s_exit_Expect(&states[AAA]);
+  s_exit_Expect(&states[AA]);
+  t_action_Expect(&states[ROOT]); // Action of AA->A_CHOICE
+  s_exit_Expect(&states[A]);
+  t_action_Expect(&states[ROOT]); // Action of A_CHOICE->B
+  s_entry_Expect(&states[B]);
+  s_entry_Expect(&states[BA]);
+  s_run_ExpectAndReturn(&states[BA], EV_6, NULL);
+  s_run_ExpectAndReturn(&states[B], EV_6, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_6, NULL);
+  t_choice_A_return = true;
+
+  // Should go to B immediately
+
+  sc_run(&states[ROOT], EV_6);
+
+  TEST_ASSERT_EQUAL_INT(1, t_choice_A_called);
+  TEST_ASSERT_EQUAL_INT(0, t_choice_B_called);
+}
+
+void test_sc_A_to_B_History_with_no_history_set(void) {
+  ignore_state_and_transition_fn();
+  sc_init(&states[ROOT], transitions);
+  stop_ignore_state_and_transition_fn();
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  s_exit_Expect(&states[AAA]);
+  s_exit_Expect(&states[AA]);
+  s_exit_Expect(&states[A]);
+  t_action_Expect(&states[ROOT]);
+  s_entry_Expect(&states[B]);
+  s_entry_Expect(&states[BC]);
+  s_run_ExpectAndReturn(&states[BC], EV_7, NULL);
+  s_run_ExpectAndReturn(&states[B], EV_7, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_7, NULL);
+
+  sc_run(&states[ROOT], EV_7);
+}
+
+/*
+ * TODO:
+ *
+ * - Empty state and transition functions
+ * - No transition found
+ * - false guard
+ * - Auto transition on normal states
+ * - Auto transitions on history states (Should not execute!)
+ * - initial != self (can be cought)
+ * - initial != other parent (can be cought)
+ * - State change via run functions on lowest and high level
+ * - State change via run on no transition found
+ * - State change via run automatic
+ */

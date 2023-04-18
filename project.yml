@@ -9,6 +9,7 @@
   :use_exceptions: FALSE
   :use_test_preprocessor: TRUE
   :use_auxiliary_dependencies: TRUE
+  :use_mocks: TRUE
   :build_root: build
 #  :release_build: TRUE
   :test_file_prefix: test_
@@ -21,7 +22,7 @@
   :test:
     :compile:
       :*:       # add '--O1' to compilation of main.c as part of test builds including main.c
-        - -O3
+        - -Og
 
 #:test_build:
 #  :use_assembly: TRUE
@@ -59,8 +60,11 @@
   :when_no_prototypes: :warn
   :enforce_strict_ordering: TRUE
   :plugins:
+    - :expect_any_args
     - :ignore
     - :callback
+    - :ignore_arg
+    - :return_thru_ptr
   :treat_as:
     uint8:    HEX8
     uint16:   HEX16

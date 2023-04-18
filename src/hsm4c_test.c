@@ -180,25 +180,23 @@ static Transition const my_transitions[] = {
 int main(void) {
   State const *current = NULL;
   State *my_sm = &my_states[ROOT];
-  current = sc_init(my_sm);
-  current = sc_run(my_sm, my_transitions, 1); // B
-  current = sc_run(my_sm, my_transitions, SC_NO_EVENT); // No change
-  current = sc_run(my_sm, my_transitions, 2); // A->C
-  current = sc_run(my_sm, my_transitions, 4); // A->D->E
-  current = sc_run(my_sm, my_transitions, 1); // B
-  current = sc_run(my_sm, my_transitions, 3); // A->D->E
-  current = sc_run(my_sm, my_transitions, 5); // A->D->F
-  current = sc_run(my_sm, my_transitions, 1); // B
-  current = sc_run(my_sm, my_transitions,
-                   3);                        // A->D->E (history of A, not of D)
-  current = sc_run(my_sm, my_transitions, 5); // A->D->F
-  current = sc_run(my_sm, my_transitions, 1); // B
-  current = sc_run(my_sm, my_transitions,
-                   6);                        // A->D->F (deep history of A, including D...)
-  current = sc_run(my_sm, my_transitions, 7); // B (run action of F)
-  current = sc_run(my_sm, my_transitions, 7); // A->C (run action of B)
-  current = sc_run(my_sm, my_transitions, 7); // A->D->E (run action of BRANCH)
-  current = sc_run(my_sm, my_transitions, 8); // G->GB (deep histoy with initial of G)
-  current = sc_run(my_sm, my_transitions, 8); // No change (conditional)
-  current = sc_run(my_sm, my_transitions, SC_NO_EVENT); // G->GA (conditional >= 1)
+  current = sc_init(my_sm, my_transitions);
+  current = sc_run(my_sm, 1);           // B
+  current = sc_run(my_sm, SC_NO_EVENT); // No change
+  current = sc_run(my_sm, 2);           // A->C
+  current = sc_run(my_sm, 4);           // A->D->E
+  current = sc_run(my_sm, 1);           // B
+  current = sc_run(my_sm, 3);           // A->D->E
+  current = sc_run(my_sm, 5);           // A->D->F
+  current = sc_run(my_sm, 1);           // B
+  current = sc_run(my_sm, 3);           // A->D->E (history of A, not of D)
+  current = sc_run(my_sm, 5);           // A->D->F
+  current = sc_run(my_sm, 1);           // B
+  current = sc_run(my_sm, 6);           // A->D->F (deep history of A, including D...)
+  current = sc_run(my_sm, 7);           // B (run action of F)
+  current = sc_run(my_sm, 7);           // A->C (run action of B)
+  current = sc_run(my_sm, 7);           // A->D->E (run action of BRANCH)
+  current = sc_run(my_sm, 8);           // G->GB (deep histoy with initial of G)
+  current = sc_run(my_sm, 8);           // No change (conditional)
+  current = sc_run(my_sm, SC_NO_EVENT); // G->GA (conditional >= 1) -> A->C (automatic)
 }
