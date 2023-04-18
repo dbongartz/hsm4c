@@ -203,7 +203,9 @@ enum events {
   EV_7,
   EV_8,
   EV_9,
-  EV_10
+  EV_10,
+  EV_11,
+  EV_12
 };
 static Transition const transitions[] = {
     {&states[A], &states[B], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
@@ -223,6 +225,8 @@ static Transition const transitions[] = {
     {&states[AAA], &states[AAA], EV_8, t_action, t_guard, SC_TTYPE_EXTERNAL},
     {&states[AA], &states[AAB], EV_9, t_action, t_guard, SC_TTYPE_EXTERNAL},
     {&states[AA], &states[AAB], EV_10, t_action, t_guard, SC_TTYPE_INTERNAL},
+    {&states[AAB], &states[AA], EV_12, t_action, t_guard, SC_TTYPE_INTERNAL},
+    {&states[AAA], &states[AAA], EV_11, t_action, t_guard, SC_TTYPE_INTERNAL},
     SC_TRANSITIONS_END,
 };
 
@@ -575,6 +579,40 @@ void test_sc_AA_to_AAB_internal(void) {
   s_run_ExpectAndReturn(&states[ROOT], EV_10, NULL);
 
   sc_run(&states[ROOT], EV_10);
+}
+
+void test_sc_AAB_to_AA_internal(void) {
+  ignore_state_and_transition_fn();
+  sc_init(&states[ROOT], transitions);
+  sc_run(&states[ROOT], EV_10);
+  stop_ignore_state_and_transition_fn();
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  s_exit_Expect(&states[AAB]);
+  t_action_Expect(&states[ROOT]);
+  s_entry_Expect(&states[AAB]); // Why is this? How should it be?
+  s_run_ExpectAndReturn(&states[AAB], EV_10, NULL);
+  s_run_ExpectAndReturn(&states[AA], EV_10, NULL);
+  s_run_ExpectAndReturn(&states[A], EV_10, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_10, NULL);
+
+  sc_run(&states[ROOT], EV_10);
+  TEST_MESSAGE("TODO. Don't undertand the specs yet");
+}
+
+void test_sc_AAA_to_AAA_internal(void) {
+  ignore_state_and_transition_fn();
+  sc_init(&states[ROOT], transitions);
+  stop_ignore_state_and_transition_fn();
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  t_action_Expect(&states[ROOT]);
+  s_run_ExpectAndReturn(&states[AAA], EV_11, NULL);
+  s_run_ExpectAndReturn(&states[AA], EV_11, NULL);
+  s_run_ExpectAndReturn(&states[A], EV_11, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_11, NULL);
+
+  sc_run(&states[ROOT], EV_11);
 }
 
 /*

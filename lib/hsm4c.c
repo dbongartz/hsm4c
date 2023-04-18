@@ -30,7 +30,7 @@ static void walk_up_set_active_state(State *start, State const *end_ancestor) {
 
 static State *walk_down_entry(State const *const root, State *start, State const *end_child) {
   State *last_node = start;
-  for (State *s = start; s != end_child; s = s->_active) {
+  for (State *s = start; s != end_child && s != NULL; s = s->_active) {
     if (s->entry_fn) {
       s->entry_fn(s);
     }
@@ -179,13 +179,8 @@ State const *sc_run(State *root, EventType event) {
     if (t->transition_fn)
       t->transition_fn(root);
 
-    // Entry target branch until target
-    walk_down_entry(root, ca->_active, target_state);
-
-    // Entry target
-    if (target_state->entry_fn) {
-      target_state->entry_fn(target_state);
-    }
+    // Entry target branch incl. target
+    walk_down_entry(root, ca->_active, target_state->_active);
 
     // We might have not initialized this state yet
     walk_down_init(target_state);
