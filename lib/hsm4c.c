@@ -162,11 +162,18 @@ State const *sc_run(State *root, EventType event) {
     // Find common ancestor of active leaf and target
     State *ca = fca(t->from, target_state);
 
-    // Exit all states on the active branch until ancestor
-    walk_up_exit(root, find_leaf(t->from), ca);
+    State *leaf = NULL;
+
+    leaf = find_leaf(t->from);
 
     // Set target branch active states to reach target
     walk_up_set_active_state(target_state, ca);
+
+    // Exit all states on the active branch until ancestor
+    if (t->type == SC_TTYPE_INTERNAL) {
+      ca = ca->_active;
+    }
+    walk_up_exit(root, leaf, ca);
 
     // Transition
     if (t->transition_fn)
@@ -184,7 +191,7 @@ State const *sc_run(State *root, EventType event) {
     walk_down_init(target_state);
 
     // Walk down until leaf
-    State *leaf = walk_down_entry(root, target_state->_active, NULL);
+    leaf = walk_down_entry(root, target_state->_active, NULL);
     root->_active = leaf ? leaf : target_state;
     t = NULL;
 

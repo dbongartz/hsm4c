@@ -17,6 +17,11 @@ typedef enum StateType {
   SC_TYPE_ROOT,
 } StateType;
 
+typedef enum TransitionType {
+  SC_TTYPE_EXTERNAL = 0,
+  SC_TTYPE_INTERNAL,
+} TransitionType;
+
 typedef void (*entry_fn)(State const *sm);
 typedef State *(*run_fn)(State const *sm, EventType e);
 typedef void (*exit_fn)(State const *sm);
@@ -33,6 +38,7 @@ struct Transition {
   int const event;
   transition_fn const transition_fn;
   guard_fn const guard_fn;
+  TransitionType type;
 };
 
 struct State {

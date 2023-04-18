@@ -192,22 +192,37 @@ State states[] = {
         },
 };
 
-enum events { EV_NO_EVENT = SC_NO_EVENT, EV_1, EV_2, EV_3, EV_4, EV_5, EV_6, EV_7 };
+enum events {
+  EV_NO_EVENT = SC_NO_EVENT,
+  EV_1,
+  EV_2,
+  EV_3,
+  EV_4,
+  EV_5,
+  EV_6,
+  EV_7,
+  EV_8,
+  EV_9,
+  EV_10
+};
 static Transition const transitions[] = {
-    {&states[A], &states[B], EV_1, t_action, t_guard},
-    {&states[B], &states[A], EV_1, t_action, t_guard},
-    {&states[A], &states[BB], EV_2, t_action, t_guard},
-    {&states[AA], &states[AB], EV_3, t_action, t_guard},
-    {&states[AB], &states[B], EV_3, t_action, t_guard},
-    {&states[B], &states[A_H], EV_3, t_action, t_guard},
-    {&states[AAA], &states[AAB], EV_4, t_action, t_guard},
-    {&states[AA], &states[B], EV_4, t_action, t_guard},
-    {&states[B], &states[A_H], EV_4, t_action, t_guard},
-    {&states[B], &states[A_DH], EV_5, t_action, t_guard},
-    {&states[AA], &states[A_CHOICE], EV_6, t_action, t_guard},
-    {&states[A_CHOICE], &states[B], EV_NO_EVENT, t_action, t_choice_A},
-    {&states[A_CHOICE], &states[C], EV_NO_EVENT, t_action, t_choice_B},
-    {&states[A], &states[B_H], EV_7, t_action, t_guard},
+    {&states[A], &states[B], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[B], &states[A], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[A], &states[BB], EV_2, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AA], &states[AB], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AB], &states[B], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[B], &states[A_H], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AAA], &states[AAB], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AA], &states[B], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[B], &states[A_H], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[B], &states[A_DH], EV_5, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AA], &states[A_CHOICE], EV_6, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[A_CHOICE], &states[B], EV_NO_EVENT, t_action, t_choice_A, SC_TTYPE_EXTERNAL},
+    {&states[A_CHOICE], &states[C], EV_NO_EVENT, t_action, t_choice_B, SC_TTYPE_EXTERNAL},
+    {&states[A], &states[B_H], EV_7, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AAA], &states[AAA], EV_8, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AA], &states[AAB], EV_9, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AA], &states[AAB], EV_10, t_action, t_guard, SC_TTYPE_INTERNAL},
     SC_TRANSITIONS_END,
 };
 
@@ -509,13 +524,64 @@ void test_sc_A_to_B_History_with_no_history_set(void) {
   sc_run(&states[ROOT], EV_7);
 }
 
+void test_sc_AAA_to_AAA_external(void) {
+  ignore_state_and_transition_fn();
+  sc_init(&states[ROOT], transitions);
+  stop_ignore_state_and_transition_fn();
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  s_exit_Expect(&states[AAA]);
+  t_action_Expect(&states[ROOT]);
+  s_entry_Expect(&states[AAA]);
+  s_run_ExpectAndReturn(&states[AAA], EV_8, NULL);
+  s_run_ExpectAndReturn(&states[AA], EV_8, NULL);
+  s_run_ExpectAndReturn(&states[A], EV_8, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_8, NULL);
+
+  sc_run(&states[ROOT], EV_8);
+}
+
+void test_sc_AA_to_AAB_external(void) {
+  ignore_state_and_transition_fn();
+  sc_init(&states[ROOT], transitions);
+  stop_ignore_state_and_transition_fn();
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  s_exit_Expect(&states[AAA]);
+  s_exit_Expect(&states[AA]);
+  t_action_Expect(&states[ROOT]);
+  s_entry_Expect(&states[AA]);
+  s_entry_Expect(&states[AAB]);
+  s_run_ExpectAndReturn(&states[AAB], EV_9, NULL);
+  s_run_ExpectAndReturn(&states[AA], EV_9, NULL);
+  s_run_ExpectAndReturn(&states[A], EV_9, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_9, NULL);
+
+  sc_run(&states[ROOT], EV_9);
+}
+
+void test_sc_AA_to_AAB_internal(void) {
+  ignore_state_and_transition_fn();
+  sc_init(&states[ROOT], transitions);
+  stop_ignore_state_and_transition_fn();
+
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  s_exit_Expect(&states[AAA]);
+  t_action_Expect(&states[ROOT]);
+  s_entry_Expect(&states[AAB]);
+  s_run_ExpectAndReturn(&states[AAB], EV_10, NULL);
+  s_run_ExpectAndReturn(&states[AA], EV_10, NULL);
+  s_run_ExpectAndReturn(&states[A], EV_10, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_10, NULL);
+
+  sc_run(&states[ROOT], EV_10);
+}
+
 /*
  * TODO:
  *
  * - Empty state and transition functions
  * - No transition found
- * - Internal Self Transitions
- * - External Self Transitions
  * - false guard
  * - Parent state with no initial (Should work as target and with child as target)
  * - Auto transition on normal states
