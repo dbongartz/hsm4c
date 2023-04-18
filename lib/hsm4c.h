@@ -21,6 +21,7 @@
  * - Parallel states
  *
  * (C) 2023 David Bongartz
+ * MIT License
  */
 
 #pragma once
