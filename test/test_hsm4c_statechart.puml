@@ -1,0 +1,50 @@
+@startuml test_hsm4c statchart
+
+state ROOT {
+    state A {
+        state AA {
+            state AAA
+            state AAB
+            [*] -> AAA
+        }
+        state AB
+        state AC
+        state A_H <<history*>>
+        state A_DH <<history>>
+        state A_CHOICE <<choice>>
+        [*] -> AA
+        A_H --> AB : [no_history]
+        A_DH --> AC : [no_history]
+    }
+    state B {
+        state BA
+        state BB
+        state BC
+        state B_H <<history>>
+        [*] -> BA
+        B_H --> BC : [no_history]
+    }
+    [*] -> A
+}
+
+A -> B : EV_1 [t_guard] / t_action()
+B -> A : EV_1 [t_guard] / t_action()
+A -> BB : EV_2 [t_guard] / t_action()
+AA -> AB : EV_3 [t_guard] / t_action()
+AB -> B : EV_3 [t_guard] / t_action()
+B -> A_H : EV_3 [t_guard] / t_action()
+AAA -> AAB : EV_4 [t_guard] / t_action()
+AA -> B : EV_4 [t_guard] / t_action()
+B -> A_H : EV_4 [t_guard] / t_action()
+B -> A_DH : EV_5 [t_guard] / t_action()
+AA --> A_CHOICE : EV_6 [t_guard] / t_action()
+A_CHOICE -> B : (1) [t_choice_A] / t_action()
+A_CHOICE -> C : (2) [t_choice_B] / t_action()
+A -> B_H : EV_7 [t_guard] / t_action()
+AAA --> AAA : EV_8 [t_guard] / t_action()
+AA -> AAB : EV_9 [t_guard] / t_action()
+AA -> AAB : EV_10 [t_guard] / t_action() <<internal>>
+AAB --> AA : EV_12 [t_guard] / t_action()
+AAA --> AAA : EV_11 [t_guard] / t_action()
+
+@enduml
