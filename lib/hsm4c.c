@@ -73,8 +73,6 @@ static Transition const *find_transition(State const *const root, Transition con
         }
       }
     }
-    b = entry_b;
-    a = a->_state->parent;
   }
 
   return NULL;
