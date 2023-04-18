@@ -80,7 +80,6 @@ State states[] = {
             .run_fn = s_run,
             .parent = &states[ROOT],
             .initial = &states[AA],
-            .type = SC_TYPE_NORMAL,
         },
     [B] =
         {
@@ -90,7 +89,6 @@ State states[] = {
             .run_fn = s_run,
             .parent = &states[ROOT],
             .initial = &states[BA],
-            .type = SC_TYPE_NORMAL,
         },
     [C] =
         {
@@ -99,7 +97,6 @@ State states[] = {
             .exit_fn = s_exit,
             .run_fn = s_run,
             .parent = &states[ROOT],
-            .type = SC_TYPE_NORMAL,
         },
     [AA] =
         {
@@ -109,7 +106,6 @@ State states[] = {
             .run_fn = s_run,
             .parent = &states[A],
             .initial = &states[AAA],
-            .type = SC_TYPE_NORMAL,
         },
     [AB] =
         {
@@ -118,7 +114,6 @@ State states[] = {
             .exit_fn = s_exit,
             .run_fn = s_run,
             .parent = &states[A],
-            .type = SC_TYPE_NORMAL,
         },
     [AC] =
         {
@@ -127,7 +122,6 @@ State states[] = {
             .exit_fn = s_exit,
             .run_fn = s_run,
             .parent = &states[A],
-            .type = SC_TYPE_NORMAL,
         },
     [BA] =
         {
@@ -136,7 +130,6 @@ State states[] = {
             .exit_fn = s_exit,
             .run_fn = s_run,
             .parent = &states[B],
-            .type = SC_TYPE_NORMAL,
         },
     [BB] =
         {
@@ -145,7 +138,6 @@ State states[] = {
             .exit_fn = s_exit,
             .run_fn = s_run,
             .parent = &states[B],
-            .type = SC_TYPE_NORMAL,
         },
     [BC] =
         {
@@ -154,7 +146,6 @@ State states[] = {
             .exit_fn = s_exit,
             .run_fn = s_run,
             .parent = &states[B],
-            .type = SC_TYPE_NORMAL,
         },
     [AAA] =
         {
@@ -163,7 +154,6 @@ State states[] = {
             .exit_fn = s_exit,
             .run_fn = s_run,
             .parent = &states[AA],
-            .type = SC_TYPE_NORMAL,
         },
     [AAB] =
         {
@@ -172,7 +162,6 @@ State states[] = {
             .exit_fn = s_exit,
             .run_fn = s_run,
             .parent = &states[AA],
-            .type = SC_TYPE_NORMAL,
         },
     [A_H] =
         {
