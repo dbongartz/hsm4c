@@ -9,6 +9,7 @@
   :use_exceptions: FALSE
   :use_test_preprocessor: TRUE
   :use_auxiliary_dependencies: TRUE
+  :use_mocks: TRUE
   :build_root: build
 #  :release_build: TRUE
   :test_file_prefix: test_
@@ -16,6 +17,12 @@
   :ceedling_version: 0.31.1
   :default_tasks:
     - test:all
+
+:flags:
+  :test:
+    :compile:
+      :*:       # add '--O1' to compilation of main.c as part of test builds including main.c
+        - -Og
 
 #:test_build:
 #  :use_assembly: TRUE
@@ -53,8 +60,11 @@
   :when_no_prototypes: :warn
   :enforce_strict_ordering: TRUE
   :plugins:
+    - :expect_any_args
     - :ignore
     - :callback
+    - :ignore_arg
+    - :return_thru_ptr
   :treat_as:
     uint8:    HEX8
     uint16:   HEX16
@@ -66,8 +76,11 @@
 # You will need to have gcov and gcovr both installed to make it work.
 # For more information on these options, see docs in plugins/gcov
 :gcov:
+  :utilities:
+    - gcovr
   :reports:
-    - HtmlDetailed
+    - Text
+    - HtmlBasic
   :gcovr:
     :html_medium_threshold: 75
     :html_high_threshold: 90
@@ -93,6 +106,7 @@
   :load_paths:
     - "#{Ceedling.load_path}"
   :enabled:
+    - gcov
     - stdout_pretty_tests_report
     - module_generator
     - xml_tests_report

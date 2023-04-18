@@ -1,31 +1,77 @@
 #include "hsm4c.h"
 
-#include <stdio.h>
+#include "stddef.h"
+#include <stdbool.h>
 
-typedef struct {
-  state_t *handler;
-  const tran_t *trans;
-} handler_trans_t;
-
-static void print_branch(state_t *root) {
-  printf("Root state: %s with children: ", root->_state->name);
-  state_t *s = s->child;
-  while (s) {
-    printf("%s ", s->_state->name);
-    s = s->child;
+static State *fca(State const *const left, State const *const right) {
+  for (State const *_left = left; _left->parent != NULL; _left = _left->parent) {
+    for (State const *_right = right; _right->parent != NULL; _right = _right->parent) {
+      if (_left->parent == _right->parent) {
+        return _left->parent;
+      }
+    }
   }
-  putchar('\n');
+  return NULL;
 }
 
-// Find lowest common ancestor
-static state_t *find_lca(state_t *a, state_t *b) {
-  state_t *entry_b = b;
-  while (a) {
-    while (b) {
-      if (a == b) {
-        return a;
+static void walk_up_exit(State const *const root, State const *start, State const *end_ancestor) {
+  for (; start != end_ancestor; start = start->parent) {
+    if (start->exit_fn) {
+      start->exit_fn(start);
+    }
+  }
+}
+
+static void walk_up_set_active_state(State *start, State const *end_ancestor) {
+  for (; start != end_ancestor; start = start->parent) {
+    start->parent->_active = start;
+  }
+}
+
+static State *walk_down_entry(State const *const root, State *start, State const *end_child) {
+  State *last_node = start;
+  for (State *s = start; s != end_child && s != NULL; s = s->_active) {
+    if (s->entry_fn) {
+      s->entry_fn(s);
+    }
+    last_node = s;
+  }
+  return last_node;
+}
+
+static void walk_down_init(State *start) {
+  for (; start != NULL; start = start->_active) {
+    start->_active = start->initial;
+  }
+}
+
+static State *find_leaf(State const *start) {
+  State const *leaf;
+  for (leaf = start; leaf->_active != NULL; leaf = leaf->_active) {
+  }
+  return (State *)leaf;
+}
+
+static State *find_root(State const *start) {
+  State const *root = NULL;
+  for (root = start; root->parent != NULL; root = root->parent) {
+  }
+  return (State *)root;
+}
+
+static Transition const *find_transition(State const *const root, Transition const transitions[],
+                                         EventType event) {
+  for (Transition const *t = transitions; t->from != NULL;
+       ++t) { // Outer loop can be removed if transitions live in State
+    if (t->event == event || t->event == SC_NO_EVENT) {
+      // Search from leaf to root.
+      for (State const *s = root->_active; s != NULL; s = s->parent) {
+        if (t->from == s) {
+          if (!t->guard_fn || (t->guard_fn && t->guard_fn(root))) {
+            return t;
+          }
+        }
       }
-      b = b->_state->parent;
     }
     b = entry_b;
     a = a->_state->parent;
@@ -34,183 +80,129 @@ static state_t *find_lca(state_t *a, state_t *b) {
   return NULL;
 }
 
-static state_t *find_leaf(state_t *s) {
-  state_t *found = NULL;
-  while (s) {
-    found = s;
-    s = s->child;
+/** \brief run active state, return if a new state got returned */
+static State *run_state(State const *const root, State *s, EventType e) {
+  if (s->run_fn) {
+    State *target_state = s->run_fn(s, e);
+    if (target_state && target_state != root->_active) {
+      return target_state;
+    }
   }
-  return found;
+  return NULL;
 }
 
-static state_t *find_root(state_t *s) {
-  state_t *found = NULL;
-  while (s) {
-    found = s;
-    s = s->_state->parent;
+static State *ancestors_run(State const *root, EventType event) {
+  for (State *s = root->_active; s != NULL; s = s->parent) {
+    State *requested_state = run_state(root, s, event);
+    if (requested_state) {
+      return requested_state;
+    }
   }
-  return found;
+  return NULL;
 }
 
-static handler_trans_t find_handler_and_trans(state_t *state, event_t event) {
-  while (state) {
-    const const_state_t *cs = state->_state;
-    for (size_t i = 0; i < cs->tran_list_size; ++i) {
-      const tran_t *trans = &cs->tran_list[i];
-
-      if (trans->event_n == event.num) {
-        if (!trans->guard_fn || trans->guard_fn(event)) {
-          return (handler_trans_t){.handler = state, .trans = trans};
-        }
+static State *get_target_state_from_type(Transition const *const t) {
+  State *target_state = NULL;
+  switch (t->to->type) {
+  case SC_TYPE_NORMAL:
+  case SC_TYPE_CHOICE:
+    target_state = t->to;
+    break;
+  case SC_TYPE_HISTORY:
+    if (!t->to->parent->_active) {
+      if (t->to->initial) {
+        target_state = t->to->initial;
+      } else {
+        target_state = t->to->parent->initial;
       }
-    }
-    state = cs->parent;
-  }
-
-  return (handler_trans_t){NULL, NULL};
-}
-
-static void walk_up_and_exit(state_t *start, state_t *target) {
-  state_t *walker = start;
-
-  do {
-    // Exit
-    if (walker->_state->exit_fn) {
-      walker->_state->exit_fn((void *)walker);
-    }
-    // Reset
-    printf("flags: %x\n", walker->_state->flags);
-    if (!(walker->_state->flags & STATE_FLAG_HISTORY)) {
-      walker->child = walker->_state->initial;
     } else {
-      printf("History: %s not reset\n", walker->_state->name);
+      target_state = t->to->parent->_active;
     }
-
-    walker = walker->_state->parent;
-  } while (walker != target && start != target);
-}
-
-static void walk_up_and_set_child(state_t *start, state_t *target) {
-  state_t *walker = start;
-  while (walker != target) {
-    if (walker->_state->parent) {
-      walker->_state->parent->child = walker;
+    break;
+  case SC_TYPE_HISTORY_DEEP:
+    target_state = find_leaf(t->to->parent);
+    if (target_state == t->to->parent) {
+      target_state = t->to->initial;
     }
-    walker = walker->_state->parent;
+    break;
+  case SC_TYPE_ROOT:
+    target_state = NULL;
+    break;
   }
+  return target_state;
 }
 
-static void walk_down_and_entry(state_t *start) {
-  state_t *walker = start;
-  while (walker) {
-    if (walker->_state->entry_fn) {
-      walker->_state->entry_fn((void *)walker);
-      if (walker->_state->initial && walker->_state->initial == walker->child && walker->_state->initial_fn) {
-        walker->_state->initial_fn(walker->child);
+/* -------- Public -------- */
+
+State *sc_init(State *root, Transition const transitions[]) {
+  walk_down_init(root);
+  root->_active = walk_down_entry(root, root, NULL);
+  root->_transitions = transitions;
+  return root->_active;
+}
+
+void sc_reset_state(State *state) {
+  state->_active = NULL;
+  state->_transitions = NULL;
+}
+
+State const *sc_run(State *root, EventType event) {
+
+  Transition const *t = find_transition(root, root->_transitions, event);
+
+  if (!t) {
+    State *requested_state = ancestors_run(root, event);
+    if (requested_state) {
+      t = &(Transition const){.from = root->_active, .to = requested_state};
+    }
+  }
+
+  while (t) {
+    // Handle StateType
+    State *target_state = get_target_state_from_type(t);
+
+    // Find common ancestor of active leaf and target
+    State *ca = fca(t->from, target_state);
+
+    State *leaf = NULL;
+
+    leaf = find_leaf(t->from);
+
+    // Set target branch active states to reach target
+    walk_up_set_active_state(target_state, ca);
+
+    // Exit all states on the active branch until ancestor
+    if (t->type == SC_TTYPE_INTERNAL) {
+      ca = ca->_active;
+    }
+    walk_up_exit(root, leaf, ca);
+
+    // Transition
+    if (t->transition_fn)
+      t->transition_fn(root);
+
+    // Entry target branch incl. target
+    walk_down_entry(root, ca->_active, target_state->_active);
+
+    // We might have not initialized this state yet
+    walk_down_init(target_state);
+
+    // Walk down until leaf
+    leaf = walk_down_entry(root, target_state->_active, NULL);
+    root->_active = leaf ? leaf : target_state;
+    t = NULL;
+
+    // Check transitions of current state with no event
+    t = find_transition(root, root->_transitions, SC_NO_EVENT);
+
+    // Run all "run" functions including parents, continue change if requested
+    if (!t) {
+      State *requested_state = ancestors_run(root, event);
+      if (requested_state) {
+        t = &(Transition const){.from = root->_active, .to = requested_state};
       }
     }
-    walker = walker->child;
-  }
-}
-
-bool dispatch_hsm(state_t *s, event_num_t event_num, void *user_data) {
-  printf("Dispatching event %d on %s...\n", event_num, s->_state->name);
-
-  // Walk down all childs until leaf
-  // Check if event can be handled there
-  // Get handling child and target state
-
-  // (Abstraction)
-  // Find all nodes walking up from handling state (exit) and walking down
-  // (entry) to reach target state Set state to init when no history and exit()
-  // Set state to next child walking down and entry()
-
-  // (Concrete algorithm)
-  // Find common state of handling child and target state (tree)
-  // Walk up self parents to common node and call exits
-  // Set each parents child state to its initial state (no history)
-
-  // Call transition action
-
-  // Walk up target parents to common node and set each to the child coming
-  // from. Walk down again and call entry()
-
-  // Walk down target childs and call entry()
-
-  state_t *handler = NULL;
-  const tran_t *trans = NULL;
-  state_t *target = NULL;
-  state_t *leaf = NULL;
-  state_t *lca = NULL;
-
-  leaf = find_leaf(s);
-
-  // Walk up again trying to handle the event
-  event_t event = { .num = event_num, .data = user_data};
-  handler_trans_t handler_trans = find_handler_and_trans(leaf, event);
-
-  handler = handler_trans.handler;
-  trans = handler_trans.trans;
-
-  if (handler && trans) {
-    target = trans->target_state;
-
-    // Self transition
-    if (target == NULL) {
-      printf("Handling event %d in state %s as SELF transition.\n", event.num,
-             handler->_state->name);
-
-      // Transition
-      if (trans->action_fn) {
-        trans->action_fn(event);
-      }
-    }
-    // Normal Transition
-    else {
-      printf("Handling event %d in state %s targeting %s\n", event.num,
-             handler->_state->name, target->_state->name);
-
-      // Find lowest common ancestor
-      lca = find_lca(leaf, target);
-
-      // Walk up from leaf, exit and reset
-      walk_up_and_exit(leaf, lca);
-
-      // Transition
-      if (trans->action_fn) {
-        trans->action_fn(event);
-      }
-
-      // Walk up from target, set child
-      walk_up_and_set_child(target, lca);
-
-      // Walk down from lca->child till leaf and entry, walk from lca if both
-      // are the same.
-      walk_down_and_entry(lca == leaf ? lca : lca->child);
-    }
-
-    print_branch(find_root(s));
-
-    return true;
   }
 
-  printf("Event %d not handled\n", event.num);
-
-  print_branch(find_root(s));
-
-  return false;
-}
-
-state_t *get_state(state_t *sm) { return find_leaf(sm); }
-state_t *get_statemachine(state_t *s) { return find_root(s); }
-
-void reset_statemachine(state_t *sm) {
-  if (sm->_state->initial == NULL) {
-    sm->child = sm->_state->initial;
-    return;
-  } else {
-    reset_statemachine(sm->child);
-    reset_statemachine(sm->_state->initial);
-    sm->child = sm->_state->initial;
-  }
+  return root->_active;
 }
