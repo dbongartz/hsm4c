@@ -514,6 +514,8 @@ void test_sc_A_to_B_History_with_no_history_set(void) {
  *
  * - Empty state and transition functions
  * - No transition found
+ * - Internal Self Transitions
+ * - External Self Transitions
  * - false guard
  * - Parent state with no initial (Should work as target and with child as target)
  * - Auto transition on normal states
