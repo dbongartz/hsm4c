@@ -1,8 +1,18 @@
+/**
+ * \brief Implementation of statechart driver
+ * \file
+ *
+ * (C) 2023 David Bongartz
+ */
+
 #include "hsm4c.h"
 
-#include "stddef.h"
 #include <stdbool.h>
+#include <stddef.h>
 
+/* -------- Private -------- */
+
+/** \brief Find common ancestor of two states. Must be same tree. */
 static State *fca(State const *const left, State const *const right) {
   for (State const *_left = left; _left->parent != NULL; _left = _left->parent) {
     for (State const *_right = right; _right->parent != NULL; _right = _right->parent) {
@@ -14,6 +24,7 @@ static State *fca(State const *const left, State const *const right) {
   return NULL;
 }
 
+/** \brief Walk up a branch and call exit_fn(). end_ancestor MUST be a valid ancestor or NULL. */
 static void walk_up_exit(State const *const root, State const *start, State const *end_ancestor) {
   for (; start != end_ancestor; start = start->parent) {
     if (start->exit_fn) {
@@ -22,12 +33,15 @@ static void walk_up_exit(State const *const root, State const *start, State cons
   }
 }
 
+/** \brief Walk up a branch and set active state to match the branch. end_ancestor MUST be a valid
+ * ancestor or NULL. */
 static void walk_up_set_active_state(State *start, State const *end_ancestor) {
   for (; start != end_ancestor; start = start->parent) {
     start->parent->_active = start;
   }
 }
 
+/** \brief Walk down a branch and call entry_fn(). end_child MUST be a valid child or NULL. */
 static State *walk_down_entry(State const *const root, State *start, State const *end_child) {
   State *last_node = start;
   for (State *s = start; s != end_child && s != NULL; s = s->_active) {
@@ -39,12 +53,14 @@ static State *walk_down_entry(State const *const root, State *start, State const
   return last_node;
 }
 
+/** \brief Walk down a branch and set initial state to active if present. */
 static void walk_down_init(State *start) {
   for (; start != NULL; start = start->_active) {
     start->_active = start->initial;
   }
 }
 
+/** \brief Finds current active leaf in a branch. */
 static State *find_leaf(State const *start) {
   State const *leaf;
   for (leaf = start; leaf->_active != NULL; leaf = leaf->_active) {
@@ -52,6 +68,7 @@ static State *find_leaf(State const *start) {
   return (State *)leaf;
 }
 
+/** \brief Finds root of statechart */
 static State *find_root(State const *start) {
   State const *root = NULL;
   for (root = start; root->parent != NULL; root = root->parent) {
@@ -59,6 +76,7 @@ static State *find_root(State const *start) {
   return (State *)root;
 }
 
+/** \brief Finds valid (matching or automatic) transition in active branch. */
 static Transition const *find_transition(State const *const root, Transition const transitions[],
                                          EventType event) {
   for (Transition const *t = transitions; t->from != NULL;
@@ -78,7 +96,7 @@ static Transition const *find_transition(State const *const root, Transition con
   return NULL;
 }
 
-/** \brief run active state, return if a new state got returned */
+/** \brief run active state, return if a new state got returned, NULL otherwise. */
 static State *run_state(State const *const root, State *s, EventType e) {
   if (s->run_fn) {
     State *target_state = s->run_fn(s, e);
@@ -89,6 +107,7 @@ static State *run_state(State const *const root, State *s, EventType e) {
   return NULL;
 }
 
+/** \brief See run_state. Do this for all states in a branch.  */
 static State *ancestors_run(State const *root, EventType event) {
   for (State *s = root->_active; s != NULL; s = s->parent) {
     State *requested_state = run_state(root, s, event);
@@ -99,6 +118,7 @@ static State *ancestors_run(State const *root, EventType event) {
   return NULL;
 }
 
+/** \brief Depending on active state type, return target state. */
 static State *get_target_state_from_type(Transition const *const t) {
   State *target_state = NULL;
   switch (t->to->type) {
@@ -132,7 +152,7 @@ static State *get_target_state_from_type(Transition const *const t) {
 
 /* -------- Public -------- */
 
-State *sc_init(State *root, Transition const transitions[]) {
+State const *sc_init(State *root, Transition const transitions[]) {
   walk_down_init(root);
   root->_active = walk_down_entry(root, root, NULL);
   root->_transitions = transitions;
@@ -170,7 +190,7 @@ State const *sc_run(State *root, EventType event) {
     walk_up_set_active_state(target_state, ca);
 
     // Exit all states on the active branch until ancestor
-    if (t->type == SC_TTYPE_INTERNAL) {
+    if (t->type == SC_TTYPE_LOCAL) {
       ca = ca->_active;
     }
     walk_up_exit(root, leaf, ca);

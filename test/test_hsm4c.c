@@ -224,9 +224,9 @@ static Transition const transitions[] = {
     {&states[A], &states[B_H], EV_7, t_action, t_guard, SC_TTYPE_EXTERNAL},
     {&states[AAA], &states[AAA], EV_8, t_action, t_guard, SC_TTYPE_EXTERNAL},
     {&states[AA], &states[AAB], EV_9, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AA], &states[AAB], EV_10, t_action, t_guard, SC_TTYPE_INTERNAL},
-    {&states[AAB], &states[AA], EV_12, t_action, t_guard, SC_TTYPE_INTERNAL},
-    {&states[AAA], &states[AAA], EV_11, t_action, t_guard, SC_TTYPE_INTERNAL},
+    {&states[AA], &states[AAB], EV_10, t_action, t_guard, SC_TTYPE_LOCAL},
+    {&states[AAB], &states[AA], EV_12, t_action, t_guard, SC_TTYPE_LOCAL},
+    {&states[AAA], &states[AAA], EV_11, t_action, t_guard, SC_TTYPE_LOCAL},
     SC_TRANSITIONS_END,
 };
 
