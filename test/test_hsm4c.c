@@ -61,8 +61,67 @@ static void stop_ignore_state_and_transition_fn(void) {
   t_guard_StopIgnore();
 }
 
-enum states { ROOT, A, B, C, AA, AB, AC, BA, BB, BC, AAA, AAB, A_H, A_DH, A_CHOICE, B_H };
-State states[] = {
+enum states {
+  ROOT,
+  A,
+  B,
+  C,
+  AA,
+  AB,
+  AC,
+  BA,
+  BB,
+  BC,
+  AAA,
+  AAB,
+  A_H,
+  A_DH,
+  A_CHOICE,
+  B_H,
+  _NUM_STATES
+};
+
+enum events {
+  EV_NO_EVENT = SC_NO_EVENT,
+  EV_1,
+  EV_2,
+  EV_3,
+  EV_4,
+  EV_5,
+  EV_6,
+  EV_7,
+  EV_8,
+  EV_9,
+  EV_10,
+  EV_11,
+  EV_12
+};
+
+State states[_NUM_STATES] = {};
+static Transition const transitions_root[] = {
+    {&states[A], &states[B], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[B], &states[A], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[A], &states[BB], EV_2, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AA], &states[AB], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AB], &states[B], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[B], &states[A_H], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AAA], &states[AAB], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AA], &states[B], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[B], &states[A_H], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[B], &states[A_DH], EV_5, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AA], &states[A_CHOICE], EV_6, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[A_CHOICE], &states[B], EV_NO_EVENT, t_action, t_choice_A, SC_TTYPE_EXTERNAL},
+    {&states[A_CHOICE], &states[C], EV_NO_EVENT, t_action, t_choice_B, SC_TTYPE_EXTERNAL},
+    {&states[A], &states[B_H], EV_7, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AAA], &states[AAA], EV_8, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AA], &states[AAB], EV_9, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AA], &states[AAB], EV_10, t_action, t_guard, SC_TTYPE_LOCAL},
+    {&states[AAB], &states[AA], EV_12, t_action, t_guard, SC_TTYPE_LOCAL},
+    {&states[AAA], &states[AAA], EV_11, t_action, t_guard, SC_TTYPE_LOCAL},
+    SC_TRANSITIONS_END,
+};
+
+static StateConfig const statecfgs[_NUM_STATES] = {
     [ROOT] =
         {
             .name = "ROOT",
@@ -71,6 +130,7 @@ State states[] = {
             .run_fn = s_run,
             .initial = &states[A],
             .type = SC_TYPE_ROOT,
+            .transitions = transitions_root,
         },
     [A] =
         {
@@ -192,45 +252,8 @@ State states[] = {
         },
 };
 
-enum events {
-  EV_NO_EVENT = SC_NO_EVENT,
-  EV_1,
-  EV_2,
-  EV_3,
-  EV_4,
-  EV_5,
-  EV_6,
-  EV_7,
-  EV_8,
-  EV_9,
-  EV_10,
-  EV_11,
-  EV_12
-};
-static Transition const transitions[] = {
-    {&states[A], &states[B], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[B], &states[A], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[A], &states[BB], EV_2, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AA], &states[AB], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AB], &states[B], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[B], &states[A_H], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AAA], &states[AAB], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AA], &states[B], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[B], &states[A_H], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[B], &states[A_DH], EV_5, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AA], &states[A_CHOICE], EV_6, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[A_CHOICE], &states[B], EV_NO_EVENT, t_action, t_choice_A, SC_TTYPE_EXTERNAL},
-    {&states[A_CHOICE], &states[C], EV_NO_EVENT, t_action, t_choice_B, SC_TTYPE_EXTERNAL},
-    {&states[A], &states[B_H], EV_7, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AAA], &states[AAA], EV_8, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AA], &states[AAB], EV_9, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AA], &states[AAB], EV_10, t_action, t_guard, SC_TTYPE_LOCAL},
-    {&states[AAB], &states[AA], EV_12, t_action, t_guard, SC_TTYPE_LOCAL},
-    {&states[AAA], &states[AAA], EV_11, t_action, t_guard, SC_TTYPE_LOCAL},
-    SC_TRANSITIONS_END,
-};
-
 void setUp(void) {
+  sc_map_stateconfig_to_states(_NUM_STATES, states, statecfgs);
   reset_choice_A();
   reset_choice_B();
   reset_all_states(ARRAY_LEN(states), states);
@@ -246,7 +269,7 @@ void test_initial(void) {
   s_entry_Expect(&states[AA]);
   s_entry_Expect(&states[AAA]);
 
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
 
   // Double init to check if it resets accordingly
   s_entry_Expect(&states[ROOT]);
@@ -254,7 +277,7 @@ void test_initial(void) {
   s_entry_Expect(&states[AA]);
   s_entry_Expect(&states[AAA]);
 
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
 }
 
 void test_sc_A_to_B(void) {
@@ -263,7 +286,7 @@ void test_sc_A_to_B(void) {
   s_entry_Expect(&states[AA]);
   s_entry_Expect(&states[AAA]);
 
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
 
   t_guard_ExpectAndReturn(&states[ROOT], true);
   s_exit_Expect(&states[AAA]);
@@ -282,7 +305,7 @@ void test_sc_A_to_B(void) {
 void test_sc_B_to_A(void) {
   ignore_state_and_transition_fn();
 
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
   sc_run(&states[ROOT], EV_1);
 
   stop_ignore_state_and_transition_fn();
@@ -305,7 +328,7 @@ void test_sc_B_to_A(void) {
 void test_sc_A_to_BB(void) {
   ignore_state_and_transition_fn();
 
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
   sc_run(&states[ROOT], EV_1);
   sc_run(&states[ROOT], EV_1);
 
@@ -328,7 +351,7 @@ void test_sc_A_to_BB(void) {
 void test_sc_AA_to_AB(void) {
   ignore_state_and_transition_fn();
 
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
 
   stop_ignore_state_and_transition_fn();
 
@@ -347,7 +370,7 @@ void test_sc_AA_to_AB(void) {
 void test_sc_AA_to_AB_to_B_to_A_History(void) {
   ignore_state_and_transition_fn();
 
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
   sc_run(&states[ROOT], EV_3);
   stop_ignore_state_and_transition_fn();
 
@@ -383,7 +406,7 @@ void test_sc_AA_to_AB_to_B_to_A_History(void) {
 void test_sc_AAA_to_AAB(void) {
   ignore_state_and_transition_fn();
 
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
   stop_ignore_state_and_transition_fn();
 
   t_guard_ExpectAndReturn(&states[ROOT], true);
@@ -401,7 +424,7 @@ void test_sc_AAA_to_AAB(void) {
 void test_sc_AAA_to_AAB_to_B_to_A_History(void) {
   ignore_state_and_transition_fn();
 
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
   sc_run(&states[ROOT], EV_4);
   // Now in AAB
   sc_run(&states[ROOT], EV_4);
@@ -427,7 +450,7 @@ void test_sc_AAA_to_AAB_to_B_to_A_History(void) {
 void test_sc_AAA_to_AAB_to_B_to_A_DeepHistory(void) {
   ignore_state_and_transition_fn();
 
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
   sc_run(&states[ROOT], EV_4);
   // Now in AAB
   sc_run(&states[ROOT], EV_4);
@@ -453,7 +476,7 @@ void test_sc_AAA_to_AAB_to_B_to_A_DeepHistory(void) {
 void test_sc_A_to_C_choice(void) {
   ignore_state_and_transition_fn();
 
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
 
   stop_ignore_state_and_transition_fn();
 
@@ -484,7 +507,7 @@ void test_sc_A_to_C_choice(void) {
 void test_sc_A_to_B_choice_auto(void) {
   ignore_state_and_transition_fn();
 
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
 
   stop_ignore_state_and_transition_fn();
 
@@ -511,7 +534,7 @@ void test_sc_A_to_B_choice_auto(void) {
 
 void test_sc_A_to_B_History_with_no_history_set(void) {
   ignore_state_and_transition_fn();
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
   stop_ignore_state_and_transition_fn();
 
   t_guard_ExpectAndReturn(&states[ROOT], true);
@@ -530,7 +553,7 @@ void test_sc_A_to_B_History_with_no_history_set(void) {
 
 void test_sc_AAA_to_AAA_external(void) {
   ignore_state_and_transition_fn();
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
   stop_ignore_state_and_transition_fn();
 
   t_guard_ExpectAndReturn(&states[ROOT], true);
@@ -547,7 +570,7 @@ void test_sc_AAA_to_AAA_external(void) {
 
 void test_sc_AA_to_AAB_external(void) {
   ignore_state_and_transition_fn();
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
   stop_ignore_state_and_transition_fn();
 
   t_guard_ExpectAndReturn(&states[ROOT], true);
@@ -566,7 +589,7 @@ void test_sc_AA_to_AAB_external(void) {
 
 void test_sc_AA_to_AAB_internal(void) {
   ignore_state_and_transition_fn();
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
   stop_ignore_state_and_transition_fn();
 
   t_guard_ExpectAndReturn(&states[ROOT], true);
@@ -583,7 +606,7 @@ void test_sc_AA_to_AAB_internal(void) {
 
 void test_sc_AAB_to_AA_internal(void) {
   ignore_state_and_transition_fn();
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
   sc_run(&states[ROOT], EV_10);
   stop_ignore_state_and_transition_fn();
 
@@ -602,7 +625,7 @@ void test_sc_AAB_to_AA_internal(void) {
 
 void test_sc_AAA_to_AAA_internal(void) {
   ignore_state_and_transition_fn();
-  sc_init(&states[ROOT], transitions);
+  sc_init(&states[ROOT]);
   stop_ignore_state_and_transition_fn();
 
   t_guard_ExpectAndReturn(&states[ROOT], true);

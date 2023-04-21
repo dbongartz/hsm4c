@@ -30,6 +30,7 @@
 #include <stddef.h>
 
 typedef struct State State;
+typedef struct StateConfig StateConfig;
 typedef struct Transition Transition;
 typedef int EventType;
 
@@ -67,7 +68,7 @@ typedef enum StateType {
    */
   SC_TYPE_CHOICE,
 
-    /**
+  /**
    * \brief Root pseudo state.
    *
    * Can have entry/exit/run functions.
@@ -159,8 +160,7 @@ struct Transition {
 /** \brief Use this to indicate the end of the transition table. */
 #define SC_TRANSITIONS_END ((Transition const){})
 
-/** \brief State class */
-struct State {
+struct StateConfig {
   /** \brief Name of the state (optional) */
   char const *name;
   /** \brief Entry function. Will be called after transition guard. (optional) */
@@ -175,13 +175,18 @@ struct State {
   State *const initial;
   /** \brief State type. See StateType description. (optional) */
   StateType type;
+    /** \brief State transition table. Only used on root node currently. */
+  Transition const *transitions;
+};
+
+/** \brief State class */
+struct State {
+  StateConfig const *config;
 
   /* Private fields */
-
   /** \brief Active child state. On root node this is always a leaf */
   State *_active;
-  /** \brief State transition table. Only used on root node currently. */
-  Transition const *_transitions;
+
 };
 
 /**
@@ -195,10 +200,14 @@ struct State {
  *
  * \return              Leaf state after init.
  */
-State const *sc_init(State *root, Transition const transitions[]);
+State const *sc_init(State *root);
 
 /** \brief Resets the given state */
 void sc_reset_state(State *state);
+
+/** \brief Map StateConfigs and State if using tables to define them */
+void sc_map_stateconfig_to_states(size_t num_states, State states[num_states],
+                                  StateConfig const statecfgs[num_states]);
 
 /**
  * \brief Runs one iteration of the statechart
@@ -211,3 +220,12 @@ void sc_reset_state(State *state);
  * \return        State after one iteration.
  */
 State const *sc_run(State *root, EventType event);
+
+/**
+ * \brief Get the root of any state
+ *
+ * \param s       State to search from.
+ *
+ * \return        Root state.
+ */
+State const *sc_get_root(State const *s);

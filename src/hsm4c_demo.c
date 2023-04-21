@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#include "hsm4c.h"
+#include "../lib/hsm4c.h"
 
 /* ========================== */
 enum my_states { ROOT, A, A_H, A_HD, BRANCH, B, C, D, D_H, E, F, G, G_HD, GA, GB };
@@ -178,6 +178,9 @@ static Transition const my_transitions[] = {
 };
 
 int main(void) {
+  printf("hsm4c demo\n");
+  printf("sizeof(State): %lu, sizeof(Transition): %lu\n\n", sizeof(State), sizeof(Transition));
+
   State const *current = NULL;
   State *my_sm = &my_states[ROOT];
   current = sc_init(my_sm, my_transitions);

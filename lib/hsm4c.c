@@ -15,10 +15,11 @@
 
 /** \brief Find common ancestor of two states. Must be same tree. */
 static State *fca(State const *const left, State const *const right) {
-  for (State const *_left = left; _left->parent != NULL; _left = _left->parent) {
-    for (State const *_right = right; _right->parent != NULL; _right = _right->parent) {
-      if (_left->parent == _right->parent) {
-        return _left->parent;
+  for (State const *_left = left; _left->config->parent != NULL; _left = _left->config->parent) {
+    for (State const *_right = right; _right->config->parent != NULL;
+         _right = _right->config->parent) {
+      if (_left->config->parent == _right->config->parent) {
+        return _left->config->parent;
       }
     }
   }
@@ -27,9 +28,9 @@ static State *fca(State const *const left, State const *const right) {
 
 /** \brief Walk up a branch and call exit_fn(). end_ancestor MUST be a valid ancestor or NULL. */
 static void walk_up_exit(State const *const root, State const *start, State const *end_ancestor) {
-  for (; start != end_ancestor; start = start->parent) {
-    if (start->exit_fn) {
-      start->exit_fn(start);
+  for (; start != end_ancestor; start = start->config->parent) {
+    if (start->config->exit_fn) {
+      start->config->exit_fn(start);
     }
   }
 }
@@ -37,8 +38,8 @@ static void walk_up_exit(State const *const root, State const *start, State cons
 /** \brief Walk up a branch and set active state to match the branch. end_ancestor MUST be a valid
  * ancestor or NULL. */
 static void walk_up_set_active_state(State *start, State const *end_ancestor) {
-  for (; start != end_ancestor; start = start->parent) {
-    start->parent->_active = start;
+  for (; start != end_ancestor; start = start->config->parent) {
+    start->config->parent->_active = start;
   }
 }
 
@@ -46,8 +47,8 @@ static void walk_up_set_active_state(State *start, State const *end_ancestor) {
 static State *walk_down_entry(State const *const root, State *start, State const *end_child) {
   State *last_node = start;
   for (State *s = start; s != end_child && s != NULL; s = s->_active) {
-    if (s->entry_fn) {
-      s->entry_fn(s);
+    if (s->config->entry_fn) {
+      s->config->entry_fn(s);
     }
     last_node = s;
   }
@@ -57,7 +58,7 @@ static State *walk_down_entry(State const *const root, State *start, State const
 /** \brief Walk down a branch and set initial state to active if present. */
 static void walk_down_init(State *start) {
   for (; start != NULL; start = start->_active) {
-    start->_active = start->initial;
+    start->_active = start->config->initial;
   }
 }
 
@@ -72,22 +73,33 @@ static State *find_leaf(State const *start) {
 /** \brief Finds root of statechart */
 static State *find_root(State const *start) {
   State const *root = NULL;
-  for (root = start; root->parent != NULL; root = root->parent) {
+  for (root = start; root->config->parent != NULL; root = root->config->parent) {
   }
   return (State *)root;
 }
 
 /** \brief Finds valid (matching or automatic) transition in active branch. */
-static Transition const *find_transition(State const *const root, Transition const transitions[],
-                                         EventType event) {
-  for (Transition const *t = transitions; t->from != NULL;
-       ++t) { // Outer loop can be removed if transitions live in State
-    if (t->event == event || t->event == SC_NO_EVENT) {
-      // Search from leaf to root.
-      for (State const *s = root->_active; s != NULL; s = s->parent) {
-        if (t->from == s) {
+static Transition const *find_transition(State const *const root, EventType event) {
+  Transition const *transitions = root->config->transitions;
+
+  for (State const *s = root->_active; s != NULL; s = s->config->parent) {
+    if (s->config->transitions) {
+      transitions = s->config->transitions;
+    }
+    for (Transition const *t = transitions; t->from != NULL; ++t) {
+      if (t->event == event || t->event == SC_NO_EVENT) {
+        if (transitions != root->config->transitions) {
           if (!t->guard_fn || (t->guard_fn && t->guard_fn(root))) {
             return t;
+          }
+        } else {
+          // Search from current state to root. TODO: Only needed when table is not sourced by state
+          for (State const *parent = s; parent != NULL; parent = parent->config->parent) {
+            if (t->from == parent) {
+              if (!t->guard_fn || (t->guard_fn && t->guard_fn(root))) {
+                return t;
+              }
+            }
           }
         }
       }
@@ -99,8 +111,8 @@ static Transition const *find_transition(State const *const root, Transition con
 
 /** \brief run active state, return if a new state got returned, NULL otherwise. */
 static State *run_state(State const *const root, State *s, EventType e) {
-  if (s->run_fn) {
-    State *target_state = s->run_fn(s, e);
+  if (s->config->run_fn) {
+    State *target_state = s->config->run_fn(s, e);
     if (target_state && target_state != root->_active) {
       return target_state;
     }
@@ -110,7 +122,7 @@ static State *run_state(State const *const root, State *s, EventType e) {
 
 /** \brief See run_state. Do this for all states in a branch.  */
 static State *ancestors_run(State const *root, EventType event) {
-  for (State *s = root->_active; s != NULL; s = s->parent) {
+  for (State *s = root->_active; s != NULL; s = s->config->parent) {
     State *requested_state = run_state(root, s, event);
     if (requested_state) {
       return requested_state;
@@ -122,26 +134,26 @@ static State *ancestors_run(State const *root, EventType event) {
 /** \brief Depending on active state type, return target state. */
 static State *get_target_state_from_type(Transition const *const t) {
   State *target_state = NULL;
-  switch (t->to->type) {
+  switch (t->to->config->type) {
   case SC_TYPE_NORMAL:
   case SC_TYPE_CHOICE:
     target_state = t->to;
     break;
   case SC_TYPE_HISTORY:
-    if (!t->to->parent->_active) {
-      if (t->to->initial) {
-        target_state = t->to->initial;
+    if (!t->to->config->parent->_active) {
+      if (t->to->config->initial) {
+        target_state = t->to->config->initial;
       } else {
-        target_state = t->to->parent->initial;
+        target_state = t->to->config->parent->config->initial;
       }
     } else {
-      target_state = t->to->parent->_active;
+      target_state = t->to->config->parent->_active;
     }
     break;
   case SC_TYPE_HISTORY_DEEP:
-    target_state = find_leaf(t->to->parent);
-    if (target_state == t->to->parent) {
-      target_state = t->to->initial;
+    target_state = find_leaf(t->to->config->parent);
+    if (target_state == t->to->config->parent) {
+      target_state = t->to->config->initial;
     }
     break;
   case SC_TYPE_ROOT:
@@ -153,21 +165,28 @@ static State *get_target_state_from_type(Transition const *const t) {
 
 /* -------- Public -------- */
 
-State const *sc_init(State *root, Transition const transitions[]) {
+State const *sc_init(State *root) {
   walk_down_init(root);
   root->_active = walk_down_entry(root, root, NULL);
-  root->_transitions = transitions;
   return root->_active;
+}
+
+void sc_map_stateconfig_to_states(size_t num_states, State states[num_states],
+                                  StateConfig const statecfgs[num_states]) {
+  for (int i = 0; i < num_states; ++i) {
+    states[i].config = &statecfgs[i];
+  }
 }
 
 void sc_reset_state(State *state) {
   state->_active = NULL;
-  state->_transitions = NULL;
 }
+
+State const *sc_get_root(State const *s) { return find_root(s); }
 
 State const *sc_run(State *root, EventType event) {
 
-  Transition const *t = find_transition(root, root->_transitions, event);
+  Transition const *t = find_transition(root, event);
 
   if (!t) {
     State *requested_state = ancestors_run(root, event);
@@ -212,7 +231,7 @@ State const *sc_run(State *root, EventType event) {
     t = NULL;
 
     // Check transitions of current state with no event
-    t = find_transition(root, root->_transitions, SC_NO_EVENT);
+    t = find_transition(root, SC_NO_EVENT);
 
     // Run all "run" functions including parents, continue change if requested
     if (!t) {
