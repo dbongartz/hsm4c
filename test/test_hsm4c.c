@@ -98,26 +98,68 @@ enum events {
 };
 
 State states[_NUM_STATES] = {};
-static Transition const transitions_root[] = {
+
+/* Use for root transition test. Comment all state transition table assignments in the state table then. */
+// static Transition const transitions_root[] = {
+//     {&states[A], &states[B], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
+//     {&states[B], &states[A], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
+//     {&states[A], &states[BB], EV_2, t_action, t_guard, SC_TTYPE_EXTERNAL},
+//     {&states[AA], &states[AB], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
+//     {&states[AB], &states[B], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
+//     {&states[B], &states[A_H], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
+//     {&states[AAA], &states[AAB], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
+//     {&states[AA], &states[B], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
+//     {&states[B], &states[A_H], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
+//     {&states[B], &states[A_DH], EV_5, t_action, t_guard, SC_TTYPE_EXTERNAL},
+//     {&states[AA], &states[A_CHOICE], EV_6, t_action, t_guard, SC_TTYPE_EXTERNAL},
+//     {&states[A_CHOICE], &states[B], EV_NO_EVENT, t_action, t_choice_A, SC_TTYPE_EXTERNAL},
+//     {&states[A_CHOICE], &states[C], EV_NO_EVENT, t_action, t_choice_B, SC_TTYPE_EXTERNAL},
+//     {&states[A], &states[B_H], EV_7, t_action, t_guard, SC_TTYPE_EXTERNAL},
+//     {&states[AAA], &states[AAA], EV_8, t_action, t_guard, SC_TTYPE_EXTERNAL},
+//     {&states[AA], &states[AAB], EV_9, t_action, t_guard, SC_TTYPE_EXTERNAL},
+//     {&states[AA], &states[AAB], EV_10, t_action, t_guard, SC_TTYPE_LOCAL},
+//     {&states[AAB], &states[AA], EV_12, t_action, t_guard, SC_TTYPE_LOCAL},
+//     {&states[AAA], &states[AAA], EV_11, t_action, t_guard, SC_TTYPE_LOCAL},
+//     SC_TRANSITIONS_END,
+// };
+static Transition const transitions_a[] = {
     {&states[A], &states[B], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[B], &states[A], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
     {&states[A], &states[BB], EV_2, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AA], &states[AB], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AB], &states[B], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[A], &states[B_H], EV_7, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    SC_TRANSITIONS_END,
+};
+static Transition const transitions_b[] = {
+    {&states[B], &states[A], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
     {&states[B], &states[A_H], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AAA], &states[AAB], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AA], &states[B], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
     {&states[B], &states[A_H], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
     {&states[B], &states[A_DH], EV_5, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    SC_TRANSITIONS_END,
+};
+static Transition const transitions_aa[] = {
+    {&states[AA], &states[AB], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AA], &states[B], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
     {&states[AA], &states[A_CHOICE], EV_6, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[A_CHOICE], &states[B], EV_NO_EVENT, t_action, t_choice_A, SC_TTYPE_EXTERNAL},
-    {&states[A_CHOICE], &states[C], EV_NO_EVENT, t_action, t_choice_B, SC_TTYPE_EXTERNAL},
-    {&states[A], &states[B_H], EV_7, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AAA], &states[AAA], EV_8, t_action, t_guard, SC_TTYPE_EXTERNAL},
     {&states[AA], &states[AAB], EV_9, t_action, t_guard, SC_TTYPE_EXTERNAL},
     {&states[AA], &states[AAB], EV_10, t_action, t_guard, SC_TTYPE_LOCAL},
-    {&states[AAB], &states[AA], EV_12, t_action, t_guard, SC_TTYPE_LOCAL},
+    SC_TRANSITIONS_END,
+};
+static Transition const transitions_ab[] = {
+    {&states[AB], &states[B], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    SC_TRANSITIONS_END,
+};
+static Transition const transitions_aaa[] = {
+    {&states[AAA], &states[AAB], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[AAA], &states[AAA], EV_8, t_action, t_guard, SC_TTYPE_EXTERNAL},
     {&states[AAA], &states[AAA], EV_11, t_action, t_guard, SC_TTYPE_LOCAL},
+    SC_TRANSITIONS_END,
+};
+static Transition const transitions_aab[] = {
+    {&states[AAB], &states[AA], EV_12, t_action, t_guard, SC_TTYPE_LOCAL},
+    SC_TRANSITIONS_END,
+};
+static Transition const transitions_a_choice[] = {
+    {&states[A_CHOICE], &states[B], EV_NO_EVENT, t_action, t_choice_A, SC_TTYPE_EXTERNAL},
+    {&states[A_CHOICE], &states[C], EV_NO_EVENT, t_action, t_choice_B, SC_TTYPE_EXTERNAL},
     SC_TRANSITIONS_END,
 };
 
@@ -130,7 +172,7 @@ static StateConfig const statecfgs[_NUM_STATES] = {
             .run_fn = s_run,
             .initial = &states[A],
             .type = SC_TYPE_ROOT,
-            .transitions = transitions_root,
+            // .transitions = transitions_root, // Use for root transition testing
         },
     [A] =
         {
@@ -140,6 +182,7 @@ static StateConfig const statecfgs[_NUM_STATES] = {
             .run_fn = s_run,
             .parent = &states[ROOT],
             .initial = &states[AA],
+            .transitions = transitions_a,
         },
     [B] =
         {
@@ -149,6 +192,7 @@ static StateConfig const statecfgs[_NUM_STATES] = {
             .run_fn = s_run,
             .parent = &states[ROOT],
             .initial = &states[BA],
+            .transitions = transitions_b,
         },
     [C] =
         {
@@ -166,6 +210,7 @@ static StateConfig const statecfgs[_NUM_STATES] = {
             .run_fn = s_run,
             .parent = &states[A],
             .initial = &states[AAA],
+            .transitions = transitions_aa,
         },
     [AB] =
         {
@@ -174,6 +219,7 @@ static StateConfig const statecfgs[_NUM_STATES] = {
             .exit_fn = s_exit,
             .run_fn = s_run,
             .parent = &states[A],
+            .transitions = transitions_ab,
         },
     [AC] =
         {
@@ -214,6 +260,7 @@ static StateConfig const statecfgs[_NUM_STATES] = {
             .exit_fn = s_exit,
             .run_fn = s_run,
             .parent = &states[AA],
+            .transitions = transitions_aaa,
         },
     [AAB] =
         {
@@ -222,6 +269,7 @@ static StateConfig const statecfgs[_NUM_STATES] = {
             .exit_fn = s_exit,
             .run_fn = s_run,
             .parent = &states[AA],
+            .transitions = transitions_aab,
         },
     [A_H] =
         {
@@ -249,6 +297,7 @@ static StateConfig const statecfgs[_NUM_STATES] = {
             .name = "A_CHOICE",
             .parent = &states[A],
             .type = SC_TYPE_CHOICE,
+            .transitions = transitions_a_choice,
         },
 };
 

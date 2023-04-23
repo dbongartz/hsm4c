@@ -3,7 +3,7 @@
 #include "../lib/hsm4c.h"
 
 /* ========================== */
-enum my_states { ROOT, A, A_H, A_HD, BRANCH, B, C, D, D_H, E, F, G, G_HD, GA, GB };
+enum my_states { ROOT, A, A_H, A_HD, BRANCH, B, C, D, D_H, E, F, G, G_HD, GA, GB, _NUM_STATES };
 static State my_states[];
 
 static void state_a_entry(State const *sm) { printf("%s\n", __func__); }
@@ -54,13 +54,27 @@ static bool condition_1(State const *sm) {
   printf("%s\n", __func__);
   return counter++ >= 1 ? true : false;
 }
-
-static State my_states[] = {
+static State my_states[_NUM_STATES];
+static Transition const my_transitions[] = {
+    {&my_states[A], &my_states[B], 1, tran_1, guard_1},
+    {&my_states[B], &my_states[A], 2, tran_2, guard_2},
+    {&my_states[B], &my_states[A_H], 3, tran_2, guard_2},
+    {&my_states[C], &my_states[D_H], 4},
+    {&my_states[E], &my_states[F], 5},
+    {&my_states[B], &my_states[A_HD], 6, tran_2, guard_2},
+    {&my_states[F], &my_states[BRANCH], 7},
+    {&my_states[E], &my_states[G_HD], 7},
+    {&my_states[GB], &my_states[GA], SC_NO_EVENT, .guard_fn = condition_1},
+    {&my_states[GA], &my_states[A], SC_NO_EVENT, .guard_fn = condition_1},
+    SC_TRANSITIONS_END,
+};
+static StateConfig const my_statecfgs[_NUM_STATES] = {
     [ROOT] =
         {
             .name = "my_sm",
             .initial = &my_states[A],
             .type = SC_TYPE_ROOT,
+            .transitions = my_transitions,
         },
     [A] = {.name = "A",
            .entry_fn = state_a_entry,
@@ -163,27 +177,14 @@ static State my_states[] = {
         },
 };
 
-static Transition const my_transitions[] = {
-    {&my_states[A], &my_states[B], 1, tran_1, guard_1},
-    {&my_states[B], &my_states[A], 2, tran_2, guard_2},
-    {&my_states[B], &my_states[A_H], 3, tran_2, guard_2},
-    {&my_states[C], &my_states[D_H], 4},
-    {&my_states[E], &my_states[F], 5},
-    {&my_states[B], &my_states[A_HD], 6, tran_2, guard_2},
-    {&my_states[F], &my_states[BRANCH], 7},
-    {&my_states[E], &my_states[G_HD], 7},
-    {&my_states[GB], &my_states[GA], SC_NO_EVENT, .guard_fn = condition_1},
-    {&my_states[GA], &my_states[A], SC_NO_EVENT, .guard_fn = condition_1},
-    SC_TRANSITIONS_END,
-};
-
 int main(void) {
   printf("hsm4c demo\n");
   printf("sizeof(State): %lu, sizeof(Transition): %lu\n\n", sizeof(State), sizeof(Transition));
 
   State const *current = NULL;
   State *my_sm = &my_states[ROOT];
-  current = sc_init(my_sm, my_transitions);
+  sc_map_stateconfig_to_states(_NUM_STATES, my_states, my_statecfgs);
+  current = sc_init(my_sm);
   current = sc_run(my_sm, 1);           // B
   current = sc_run(my_sm, SC_NO_EVENT); // No change
   current = sc_run(my_sm, 2);           // A->C

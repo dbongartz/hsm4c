@@ -90,6 +90,11 @@ typedef enum TransitionType {
    * When "Same -> Same" no entry and exit function is executed (internal transition)
    */
   SC_TTYPE_LOCAL,
+
+  /**
+   * \brief Use to indicate the end of transition tables
+   */
+  SC_TTYPE_TABLE_END,
 } TransitionType;
 
 /** \brief Special events. Must be <= 0 */
@@ -158,7 +163,7 @@ struct Transition {
 };
 
 /** \brief Use this to indicate the end of the transition table. */
-#define SC_TRANSITIONS_END ((Transition const){})
+#define SC_TRANSITIONS_END ((Transition const){.type = SC_TTYPE_TABLE_END})
 
 struct StateConfig {
   /** \brief Name of the state (optional) */
@@ -183,7 +188,6 @@ struct StateConfig {
 struct State {
   StateConfig const *config;
 
-  /* Private fields */
   /** \brief Active child state. On root node this is always a leaf */
   State *_active;
 

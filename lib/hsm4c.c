@@ -43,23 +43,28 @@ static void walk_up_set_active_state(State *start, State const *end_ancestor) {
   }
 }
 
-/** \brief Walk down a branch and call entry_fn(). end_child MUST be a valid child or NULL. */
-static State *walk_down_entry(State const *const root, State *start, State const *end_child) {
-  State *last_node = start;
-  for (State *s = start; s != end_child && s != NULL; s = s->_active) {
-    if (s->config->entry_fn) {
-      s->config->entry_fn(s);
-    }
-    last_node = s;
+/** \brief Walk down a branch and call entry_fn(). */
+static void walk_down_entry(State const * const start, State const * const end_child) {
+  if (!end_child || !start) {
+    return;
   }
-  return last_node;
+
+  if (end_child != start) {
+    walk_down_entry(start, end_child->config->parent);
+  }
+
+  if (end_child && end_child->config->entry_fn) {
+    end_child->config->entry_fn(end_child);
+  }
 }
 
 /** \brief Walk down a branch and set initial state to active if present. */
-static void walk_down_init(State *start) {
-  for (; start != NULL; start = start->_active) {
+static State *walk_down_init(State *start) {
+  for (; start->config->initial != NULL; start = start->config->initial) {
     start->_active = start->config->initial;
   }
+  start->_active = start->config->initial;
+  return start;
 }
 
 /** \brief Finds current active leaf in a branch. */
@@ -83,10 +88,11 @@ static Transition const *find_transition(State const *const root, EventType even
   Transition const *transitions = root->config->transitions;
 
   for (State const *s = root->_active; s != NULL; s = s->config->parent) {
-    if (s->config->transitions) {
-      transitions = s->config->transitions;
+    if (!s->config->transitions) {
+      continue;
     }
-    for (Transition const *t = transitions; t->from != NULL; ++t) {
+    transitions = s->config->transitions;
+    for (Transition const *t = transitions; t->type != SC_TTYPE_TABLE_END; ++t) {
       if (t->event == event || t->event == SC_NO_EVENT) {
         if (transitions != root->config->transitions) {
           if (!t->guard_fn || (t->guard_fn && t->guard_fn(root))) {
@@ -94,7 +100,8 @@ static Transition const *find_transition(State const *const root, EventType even
           }
         } else {
           // Search from current state to root. TODO: Only needed when table is not sourced by state
-          for (State const *parent = s; parent != NULL; parent = parent->config->parent) {
+          for (State const *parent = root->_active; parent != NULL;
+               parent = parent->config->parent) {
             if (t->from == parent) {
               if (!t->guard_fn || (t->guard_fn && t->guard_fn(root))) {
                 return t;
@@ -166,21 +173,19 @@ static State *get_target_state_from_type(Transition const *const t) {
 /* -------- Public -------- */
 
 State const *sc_init(State *root) {
-  walk_down_init(root);
-  root->_active = walk_down_entry(root, root, NULL);
+  root->_active = walk_down_init(root);
+  walk_down_entry(root, root->_active);
   return root->_active;
 }
 
 void sc_map_stateconfig_to_states(size_t num_states, State states[num_states],
                                   StateConfig const statecfgs[num_states]) {
-  for (int i = 0; i < num_states; ++i) {
+  for (size_t i = 0; i < num_states; ++i) {
     states[i].config = &statecfgs[i];
   }
 }
 
-void sc_reset_state(State *state) {
-  state->_active = NULL;
-}
+void sc_reset_state(State *state) { state->_active = NULL; }
 
 State const *sc_get_root(State const *s) { return find_root(s); }
 
@@ -202,9 +207,9 @@ State const *sc_run(State *root, EventType event) {
     // Find common ancestor of active leaf and target
     State *ca = fca(t->from, target_state);
 
-    State *leaf = NULL;
+    State *from_leaf = NULL;
 
-    leaf = find_leaf(t->from);
+    from_leaf = root->_active;
 
     // Set target branch active states to reach target
     walk_up_set_active_state(target_state, ca);
@@ -213,21 +218,21 @@ State const *sc_run(State *root, EventType event) {
     if (t->type == SC_TTYPE_LOCAL) {
       ca = ca->_active;
     }
-    walk_up_exit(root, leaf, ca);
+    walk_up_exit(root, from_leaf, ca);
 
     // Transition
     if (t->transition_fn)
       t->transition_fn(root);
 
     // Entry target branch incl. target
-    walk_down_entry(root, ca->_active, target_state->_active);
+    walk_down_entry(ca->_active, target_state);
 
     // We might have not initialized this state yet
-    walk_down_init(target_state);
+    from_leaf = walk_down_init(target_state);
 
     // Walk down until leaf
-    leaf = walk_down_entry(root, target_state->_active, NULL);
-    root->_active = leaf ? leaf : target_state;
+    walk_down_entry(target_state->_active, from_leaf);
+    root->_active = from_leaf ? from_leaf : target_state;
     t = NULL;
 
     // Check transitions of current state with no event
