@@ -7,7 +7,6 @@ enable_testing()
 add_subdirectory(src)
 add_subdirectory(lib)
 
-add_compile_options(-Og -g)
 add_compile_options(-Wall -Wextra -pedantic)
 
 
