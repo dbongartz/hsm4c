@@ -26,18 +26,22 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 
-typedef struct State State;
-typedef struct StateConfig StateConfig;
-typedef struct Transition Transition;
-typedef int EventType;
+typedef struct hsm4c_state hsm4c_state_t;
+typedef struct hsm4c_state_config hsm4c_state_config_t;
+typedef struct hsm4c_transition hsm4c_transition_t;
+typedef int hsm4c_event_t;
 
-/** \brief State Types */
-typedef enum StateType {
+/** \brief hsm4c_State Types */
+typedef enum hsm4c_state_type {
   /** \brief Default (compund) state type */
-  SC_TYPE_NORMAL = 0,
+  HSM4C_TYPE_NORMAL = 0,
 
   /**
    * \brief History pseudo state. Must not have entry/exit/run/children.
@@ -46,7 +50,7 @@ typedef enum StateType {
    * If parent does not have an active substate, will try using the
    * specified initial state if present, the parents initial state otherwise.
    */
-  SC_TYPE_HISTORY,
+  HSM4C_TYPE_HISTORY,
 
   /**
    * \brief Deep History pseudo state. Must not have entry/exit/run/children.
@@ -57,16 +61,16 @@ typedef enum StateType {
    * If parent does not have an active substate, will try using the
    * specified initial state if present, the parents initial state otherwise.
    */
-  SC_TYPE_HISTORY_DEEP,
+  HSM4C_TYPE_HISTORY_DEEP,
 
   /**
    * \brief Choice pseudo state.
    *
    * Must not have entry/exit/run/children.
-   * Must only have automatic (SC_NO_EVENT) guarded transition. Transitions are evaluated in
+   * Must only have automatic (HSM4C_NO_EVENT) guarded transition. Transitions are evaluated in
    * table order.
    */
-  SC_TYPE_CHOICE,
+  HSM4C_TYPE_CHOICE,
 
   /**
    * \brief Root pseudo state.
@@ -75,13 +79,13 @@ typedef enum StateType {
    * Must have initial state.
    * Must have no parent (NULL).
    */
-  SC_TYPE_ROOT,
-} StateType;
+  HSM4C_TYPE_ROOT,
+} hsm4c_state_type_e;
 
-/** \brief Transition Types */
-typedef enum TransitionType {
+/** \brief hsm4c_Transition Types */
+typedef enum hsm4c_transition_type {
   /** \brief External (default) transition. Source and target states are exited and entered. */
-  SC_TTYPE_EXTERNAL = 0,
+  HSM4C_TTYPE_EXTERNAL = 0,
 
   /**
    * \brief Local transition. Source is not exited.
@@ -89,53 +93,53 @@ typedef enum TransitionType {
    * Must be "Parent -> Child" or "Same -> Same"
    * When "Same -> Same" no entry and exit function is executed (internal transition)
    */
-  SC_TTYPE_LOCAL,
+  HSM4C_TTYPE_LOCAL,
 
   /**
    * \brief Use to indicate the end of transition tables
    */
-  SC_TTYPE_TABLE_END,
-} TransitionType;
+  HSM4C_TTYPE_TABLE_END,
+} hsm4c_transition_type_e;
 
 /** \brief Special events. Must be <= 0 */
-typedef enum ScEvents {
+typedef enum hsm4c_events {
   /** \brief Use this for event-less / automatic transitions. */
-  SC_NO_EVENT = 0,
-} ScEvents;
+  HSM4C_NO_EVENT = -1,
+} hsm4c_events_e;
 
 /**
  * \brief Entry function prototype.
  *
  * \param s   Current state
  */
-typedef void (*entry_fn)(State const *s);
+typedef void (*hsm4c_entry_fn)(hsm4c_state_t const *s);
 
 /**
  * \brief Run function prototype.
  *
  * \param s   Current state.
- * \param e   Event of transition if any. SC_NO_EVENT if not in transition.
+ * \param e   Event of transition if any. HSM4C_NO_EVENT if not in transition.
  *
  * \return    Valid state to trigger immediate transition. NULL to not change state.
  *
- * \attention Transition in run are not visible in the transition table.
+ * \attention Transitions from here are not visible in the transition table.
  *            Be careful with this.
  */
-typedef State *(*run_fn)(State const *s, EventType e);
+typedef hsm4c_state_t *(*hsm4c_run_fn)(hsm4c_state_t const *s, hsm4c_event_t e);
 
 /**
  * \brief Exit function prototype.
  *
  * \param s   Current state
  */
-typedef void (*exit_fn)(State const *s);
+typedef void (*hsm4c_exit_fn)(hsm4c_state_t const *s);
 
 /**
- * \brief Transition action prototype.
+ * \brief hsm4c_Transition action prototype.
  *
  * \param s   Root state
  */
-typedef void (*transition_fn)(State const *root);
+typedef void (*hsm4c_transition_fn)(hsm4c_state_t const *root);
 
 /**
  * \brief Guard prototype.
@@ -144,74 +148,73 @@ typedef void (*transition_fn)(State const *root);
  *
  * \return    true if transition should be taken. false otherwise.
  */
-typedef bool (*guard_fn)(State const *root);
+typedef bool (*hsm4c_guard_fn)(hsm4c_state_t const *root);
 
-/** \brief Transition class */
-struct Transition {
+/** \brief hsm4c_Transition class */
+struct hsm4c_transition {
   /** \brief Source state of transition. Must be a valid state. */
-  State *const from;
+  hsm4c_state_t *const from;
   /** \brief Target state of transition. Must be a valid state. */
-  State *const to;
-  /** \brief Event the transition reacts to. Must be positive or one of ScEvents */
-  EventType const event;
-  /** \brief Transition function. Will be called after all exits, before all entrys */
-  transition_fn const transition_fn;
+  hsm4c_state_t *const to;
+  /** \brief Event the transition reacts to. Must be positive or one of hsm4c_ScEvents */
+  hsm4c_event_t const event;
+  /** \brief hsm4c_Transition function. Will be called after all exits, before all entrys */
+  hsm4c_transition_fn const transition_fn;
   /** \brief Guard. Return true to take transition. Called when matching source and event found */
-  guard_fn const guard_fn;
-  /** \brief Transition type. Default: External */
-  TransitionType type;
+  hsm4c_guard_fn const guard_fn;
+  /** \brief hsm4c_Transition type. Default: External */
+  hsm4c_transition_type_e type;
 };
 
 /** \brief Use this to indicate the end of the transition table. */
-#define SC_TRANSITIONS_END ((Transition const){.type = SC_TTYPE_TABLE_END})
+#define HSM4C_TRANSITIONS_END ((hsm4c_transition_t const){.type = HSM4C_TTYPE_TABLE_END})
 
-struct StateConfig {
+struct hsm4c_state_config {
   /** \brief Name of the state (optional) */
   char const *name;
   /** \brief Entry function. Will be called after transition guard. (optional) */
-  entry_fn const entry_fn;
+  hsm4c_entry_fn const entry_fn;
   /** \brief Run function. Can change state. After transition or when no transition (optional) */
-  run_fn const run_fn;
+  hsm4c_run_fn const run_fn;
   /** \brief Entry function. After transition guard. (optional) */
-  exit_fn const exit_fn;
+  hsm4c_exit_fn const exit_fn;
   /** \brief Parent state. Must be statchart root or NULL if this is root state. (mandatory) */
-  State *const parent;
+  hsm4c_state_t *const parent;
   /** \brief Initial state. When target is this state, also transition into initial. (optional) */
-  State *const initial;
-  /** \brief State type. See StateType description. (optional) */
-  StateType type;
-    /** \brief State transition table. Only used on root node currently. */
-  Transition const *transitions;
+  hsm4c_state_t *const initial;
+  /** \brief hsm4c_State type. See hsm4c_StateType description. (optional) */
+  hsm4c_state_type_e type;
+  /** \brief hsm4c_State transition table. Only used on root node currently. */
+  hsm4c_transition_t const *transitions;
 };
 
-/** \brief State class */
-struct State {
-  StateConfig const *config;
+/** \brief hsm4c_State class */
+struct hsm4c_state {
+  hsm4c_state_config_t const *config;
 
   /** \brief Active child state. On root node this is always a leaf */
-  State *_active;
-
+  hsm4c_state_t *_active;
 };
 
 /**
  * \brief Initialized a statechart
  *
  * This does only initialize the root tree.
- * To reset all states please iterate with `sc_reset_state()`.
+ * To reset all states please iterate with `hsm4c_reset_state()`.
  *
  * \param root          Statechart root state.
- * \param transitions   Transition table. Last element must be SC_TRANSITIONS_END.
+ * \param transitions   hsm4c_Transition table. Last element must be HSM4C_TRANSITIONS_END.
  *
  * \return              Leaf state after init.
  */
-State const *sc_init(State *root);
+hsm4c_state_t const *hsm4c_init(hsm4c_state_t *root);
 
 /** \brief Resets the given state */
-void sc_reset_state(State *state);
+void hsm4c_reset_state(hsm4c_state_t *state);
 
-/** \brief Map StateConfigs and State if using tables to define them */
-void sc_map_stateconfig_to_states(size_t num_states, State states[num_states],
-                                  StateConfig const statecfgs[num_states]);
+/** \brief Map StateConfigs and hsm4c_State if using tables to define them */
+void hsm4c_map_stateconfig_to_states(size_t num_states, hsm4c_state_t states[num_states],
+                                     hsm4c_state_config_t const statecfgs[num_states]);
 
 /**
  * \brief Runs one iteration of the statechart
@@ -219,17 +222,21 @@ void sc_map_stateconfig_to_states(size_t num_states, State states[num_states],
  * \param root    Statechart root state.
  * \param event   Event to pass to the statechart.
  *                Events <= 0 are used internally.
- *                E.g. SC_NO_EVENT is 0
+ *                E.g. HSM4C_NO_EVENT is 0
  *
- * \return        State after one iteration.
+ * \return        hsm4c_State after one iteration.
  */
-State const *sc_run(State *root, EventType event);
+hsm4c_state_t const *hsm4c_run(hsm4c_state_t *root, hsm4c_event_t event);
 
 /**
  * \brief Get the root of any state
  *
- * \param s       State to search from.
+ * \param s       hsm4c_State to search from.
  *
  * \return        Root state.
  */
-State const *sc_get_root(State const *s);
+hsm4c_state_t const *hsm4c_get_root(hsm4c_state_t const *s);
+
+#ifdef __cplusplus
+}
+#endif

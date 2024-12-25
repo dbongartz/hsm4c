@@ -4,58 +4,58 @@
 
 /* ========================== */
 enum my_states { ROOT, A, A_H, A_HD, BRANCH, B, C, D, D_H, E, F, G, G_HD, GA, GB, _NUM_STATES };
-static State my_states[];
+static hsm4c_state_t my_states[];
 
-static void state_a_entry(State const *sm) { printf("%s\n", __func__); }
-static void state_a_exit(State const *sm) { printf("%s\n", __func__); }
-static State *state_branch_run(State const *sm, EventType e) {
+static void state_a_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static void state_a_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static hsm4c_state_t *state_branch_run(hsm4c_state_t const *sm, hsm4c_event_t e) {
   printf("%s\n", __func__);
   return &my_states[D];
 };
-static void state_b_entry(State const *sm) { printf("%s\n", __func__); }
-static void state_b_exit(State const *sm) { printf("%s\n", __func__); }
-static void state_c_entry(State const *sm) { printf("%s\n", __func__); }
-static void state_c_exit(State const *sm) { printf("%s\n", __func__); }
-static State *state_b_run(State const *sm, EventType e) {
+static void state_b_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static void state_b_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static void state_c_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static void state_c_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static hsm4c_state_t *state_b_run(hsm4c_state_t const *sm, hsm4c_event_t e) {
   printf("%s\n", __func__);
   //   return &my_states[C];
   return NULL;
 };
-static void state_d_entry(State const *sm) { printf("%s\n", __func__); }
-static void state_d_exit(State const *sm) { printf("%s\n", __func__); }
-static void state_e_entry(State const *sm) { printf("%s\n", __func__); }
-static void state_e_exit(State const *sm) { printf("%s\n", __func__); }
-static void state_f_entry(State const *sm) { printf("%s\n", __func__); }
-static void state_f_exit(State const *sm) { printf("%s\n", __func__); }
-static State *state_f_run(State const *sm, EventType e) {
+static void state_d_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static void state_d_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static void state_e_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static void state_e_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static void state_f_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static void state_f_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static hsm4c_state_t *state_f_run(hsm4c_state_t const *sm, hsm4c_event_t e) {
   printf("%s\n", __func__);
   //   return &my_states[B];
   return NULL;
 };
-static void state_g_entry(State const *sm) { printf("%s\n", __func__); }
-static void state_g_exit(State const *sm) { printf("%s\n", __func__); }
-static void state_ga_entry(State const *sm) { printf("%s\n", __func__); }
-static void state_ga_exit(State const *sm) { printf("%s\n", __func__); }
-static void state_gb_entry(State const *sm) { printf("%s\n", __func__); }
-static void state_gb_exit(State const *sm) { printf("%s\n", __func__); }
+static void state_g_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static void state_g_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static void state_ga_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static void state_ga_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static void state_gb_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static void state_gb_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
 
-static void tran_1(State const *sm) { printf("%s\n", __func__); }
-static void tran_2(State const *sm) { printf("%s\n", __func__); }
-static bool guard_1(State const *sm) {
+static void tran_1(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static void tran_2(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static bool guard_1(hsm4c_state_t const *sm) {
   printf("%s\n", __func__);
   return true;
 }
-static bool guard_2(State const *sm) {
+static bool guard_2(hsm4c_state_t const *sm) {
   printf("%s\n", __func__);
   return true;
 }
-static bool condition_1(State const *sm) {
+static bool condition_1(hsm4c_state_t const *sm) {
   static int counter = 0;
   printf("%s\n", __func__);
   return counter++ >= 1 ? true : false;
 }
-static State my_states[_NUM_STATES];
-static Transition const my_transitions[] = {
+static hsm4c_state_t my_states[_NUM_STATES];
+static hsm4c_transition_t const my_transitions[] = {
     {&my_states[A], &my_states[B], 1, tran_1, guard_1},
     {&my_states[B], &my_states[A], 2, tran_2, guard_2},
     {&my_states[B], &my_states[A_H], 3, tran_2, guard_2},
@@ -64,16 +64,16 @@ static Transition const my_transitions[] = {
     {&my_states[B], &my_states[A_HD], 6, tran_2, guard_2},
     {&my_states[F], &my_states[BRANCH], 7},
     {&my_states[E], &my_states[G_HD], 7},
-    {&my_states[GB], &my_states[GA], SC_NO_EVENT, .guard_fn = condition_1},
-    {&my_states[GA], &my_states[A], SC_NO_EVENT, .guard_fn = condition_1},
-    SC_TRANSITIONS_END,
+    {&my_states[GB], &my_states[GA], HSM4C_NO_EVENT, .guard_fn = condition_1},
+    {&my_states[GA], &my_states[A], HSM4C_NO_EVENT, .guard_fn = condition_1},
+    HSM4C_TRANSITIONS_END,
 };
-static StateConfig const my_statecfgs[_NUM_STATES] = {
+static hsm4c_state_config_t const my_statecfgs[_NUM_STATES] = {
     [ROOT] =
         {
             .name = "my_sm",
             .initial = &my_states[A],
-            .type = SC_TYPE_ROOT,
+            .type = HSM4C_TYPE_ROOT,
             .transitions = my_transitions,
         },
     [A] = {.name = "A",
@@ -91,7 +91,7 @@ static StateConfig const my_statecfgs[_NUM_STATES] = {
         {
             .name = "A_H",
             .parent = &my_states[A],
-            .type = SC_TYPE_HISTORY,
+            .type = HSM4C_TYPE_HISTORY,
         },
 
     [A_HD] =
@@ -99,7 +99,7 @@ static StateConfig const my_statecfgs[_NUM_STATES] = {
             .name = "A_H*",
             .parent = &my_states[A],
             .initial = &my_states[C],
-            .type = SC_TYPE_HISTORY_DEEP,
+            .type = HSM4C_TYPE_HISTORY_DEEP,
         },
     [B] =
         {
@@ -129,7 +129,7 @@ static StateConfig const my_statecfgs[_NUM_STATES] = {
             .name = "D_H",
             .parent = &my_states[D],
             .initial = &my_states[E],
-            .type = SC_TYPE_HISTORY,
+            .type = HSM4C_TYPE_HISTORY,
         },
     [E] =
         {
@@ -159,7 +159,7 @@ static StateConfig const my_statecfgs[_NUM_STATES] = {
             .name = "G_HD",
             .parent = &my_states[G],
             .initial = &my_states[GB],
-            .type = SC_TYPE_HISTORY_DEEP,
+            .type = HSM4C_TYPE_HISTORY_DEEP,
         },
     [GA] =
         {
@@ -179,28 +179,29 @@ static StateConfig const my_statecfgs[_NUM_STATES] = {
 
 int main(void) {
   printf("hsm4c demo\n");
-  printf("sizeof(State): %lu, sizeof(Transition): %lu\n\n", sizeof(State), sizeof(Transition));
+  printf("sizeof(hsm4c_state_t): %lu, sizeof(hsm4c_transition_t): %lu\n\n", sizeof(hsm4c_state_t),
+         sizeof(hsm4c_transition_t));
 
-  State const *current = NULL;
-  State *my_sm = &my_states[ROOT];
-  sc_map_stateconfig_to_states(_NUM_STATES, my_states, my_statecfgs);
-  current = sc_init(my_sm);
-  current = sc_run(my_sm, 1);           // B
-  current = sc_run(my_sm, SC_NO_EVENT); // No change
-  current = sc_run(my_sm, 2);           // A->C
-  current = sc_run(my_sm, 4);           // A->D->E
-  current = sc_run(my_sm, 1);           // B
-  current = sc_run(my_sm, 3);           // A->D->E
-  current = sc_run(my_sm, 5);           // A->D->F
-  current = sc_run(my_sm, 1);           // B
-  current = sc_run(my_sm, 3);           // A->D->E (history of A, not of D)
-  current = sc_run(my_sm, 5);           // A->D->F
-  current = sc_run(my_sm, 1);           // B
-  current = sc_run(my_sm, 6);           // A->D->F (deep history of A, including D...)
-  current = sc_run(my_sm, 7);           // B (run action of F)
-  current = sc_run(my_sm, 7);           // A->C (run action of B)
-  current = sc_run(my_sm, 7);           // A->D->E (run action of BRANCH)
-  current = sc_run(my_sm, 8);           // G->GB (deep histoy with initial of G)
-  current = sc_run(my_sm, 8);           // No change (conditional)
-  current = sc_run(my_sm, SC_NO_EVENT); // G->GA (conditional >= 1) -> A->C (automatic)
+  hsm4c_state_t const *current = NULL;
+  hsm4c_state_t *my_sm = &my_states[ROOT];
+  hsm4c_map_stateconfig_to_states(_NUM_STATES, my_states, my_statecfgs);
+  current = hsm4c_init(my_sm);
+  current = hsm4c_run(my_sm, 1);              // B
+  current = hsm4c_run(my_sm, HSM4C_NO_EVENT); // No change
+  current = hsm4c_run(my_sm, 2);              // A->C
+  current = hsm4c_run(my_sm, 4);              // A->D->E
+  current = hsm4c_run(my_sm, 1);              // B
+  current = hsm4c_run(my_sm, 3);              // A->D->E
+  current = hsm4c_run(my_sm, 5);              // A->D->F
+  current = hsm4c_run(my_sm, 1);              // B
+  current = hsm4c_run(my_sm, 3);              // A->D->E (history of A, not of D)
+  current = hsm4c_run(my_sm, 5);              // A->D->F
+  current = hsm4c_run(my_sm, 1);              // B
+  current = hsm4c_run(my_sm, 6);              // A->D->F (deep history of A, including D...)
+  current = hsm4c_run(my_sm, 7);              // B (run action of F)
+  current = hsm4c_run(my_sm, 7);              // A->C (run action of B)
+  current = hsm4c_run(my_sm, 7);              // A->D->E (run action of BRANCH)
+  current = hsm4c_run(my_sm, 8);              // G->GB (deep histoy with initial of G)
+  current = hsm4c_run(my_sm, 8);              // No change (conditional)
+  current = hsm4c_run(my_sm, HSM4C_NO_EVENT); // G->GA (conditional >= 1) -> A->C (automatic)
 }
