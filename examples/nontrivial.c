@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#include "../lib/hsm4c.h"
+#include "hsm4c.h"
 
 /* ========================== */
 enum my_states { ROOT, A, A_H, A_HD, BRANCH, B, C, D, D_H, E, F, G, G_HD, GA, GB, _NUM_STATES };

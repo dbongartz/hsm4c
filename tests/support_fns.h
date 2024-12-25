@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../lib/hsm4c.h"
+#include "hsm4c.h"
 
 void s_entry(State const *s);
 void s_exit(State const *s);

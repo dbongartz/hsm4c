@@ -1,10 +1,5 @@
+add_library(hsm4c hsm4c.h hsm4c.c)
 
-include_directories(lib)
-include_directories(/opt/ruby/3.0.3/lib/ruby/gems/3.0.0/gems/ceedling-0.31.1/vendor/unity/src/)
-
-add_executable(hsm4c_demo hsm4c_demo.c)
-target_link_libraries(hsm4c_demo PUBLIC hsm4c)
-
-set_property(TARGET hsm4c_demo PROPERTY C_STANDARD 17)
-
-target_include_directories(hsm4c_demo PUBLIC "${PROJECT_SOURCE_DIR}/lib")
+target_include_directories(hsm4c PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_options(hsm4c PRIVATE -Wall -Wextra -pedantic)
+target_compile_features(hsm4c PRIVATE c_std_17)
