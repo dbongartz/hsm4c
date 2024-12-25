@@ -183,8 +183,8 @@ hsm4c_state_t const *hsm4c_init(hsm4c_state_t *root) {
   return root->_active;
 }
 
-void hsm4c_map_stateconfig_to_states(size_t num_states, hsm4c_state_t states[num_states],
-                                     hsm4c_state_config_t const statecfgs[num_states]) {
+void hsm4c_assign_stateconfigs_to_states(size_t num_states, hsm4c_state_t *states,
+                                         hsm4c_state_config_t const *statecfgs) {
   for (size_t i = 0; i < num_states; ++i) {
     states[i].config = &statecfgs[i];
   }

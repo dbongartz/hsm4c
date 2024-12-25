@@ -213,8 +213,8 @@ hsm4c_state_t const *hsm4c_init(hsm4c_state_t *root);
 void hsm4c_reset_state(hsm4c_state_t *state);
 
 /** \brief Map StateConfigs and hsm4c_State if using tables to define them */
-void hsm4c_map_stateconfig_to_states(size_t num_states, hsm4c_state_t states[num_states],
-                                     hsm4c_state_config_t const statecfgs[num_states]);
+void hsm4c_assign_stateconfigs_to_states(size_t num_states, hsm4c_state_t *states,
+                                         hsm4c_state_config_t const *statecfgs);
 
 /**
  * \brief Runs one iteration of the statechart

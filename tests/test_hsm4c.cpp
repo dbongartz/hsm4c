@@ -29,7 +29,7 @@ hsm4c_state_t *run_fn(hsm4c_state_t const *s, hsm4c_event_t e) {
 void exit_fn(hsm4c_state_t const *s) { state_fn_mocks.exit_fn(s); }
 }
 
-TEST_CASE("Only Root hsm4c_State", "[trivial]") {
+TEST_CASE("One State", "[trivial]") {
   hsm4c_state_t root;
   hsm4c_state_t s1;
 

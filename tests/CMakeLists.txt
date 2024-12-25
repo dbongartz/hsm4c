@@ -20,6 +20,12 @@ include(Catch)
 
 add_executable(test_hsm4c test_hsm4c.cpp)
 target_link_libraries(test_hsm4c PRIVATE hsm4c Catch2::Catch2WithMain trompeloeil)
+target_compile_features(test_hsm4c PRIVATE cxx_std_20 c_std_17)
 catch_discover_tests(test_hsm4c)
 
-add_custom_target(tests COMMAND ${CMAKE_CTEST_COMMAND} DEPENDS test_hsm4c)
+add_executable(test_hsm4c_conv test_hsm4c_conv.cpp)
+target_link_libraries(test_hsm4c_conv PRIVATE hsm4c Catch2::Catch2WithMain trompeloeil)
+target_compile_features(test_hsm4c_conv PRIVATE cxx_std_20 c_std_17)
+catch_discover_tests(test_hsm4c_conv)
+
+add_custom_target(tests COMMAND ${CMAKE_CTEST_COMMAND} DEPENDS test_hsm4c test_hsm4c_conv)

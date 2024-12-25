@@ -184,7 +184,7 @@ int main(void) {
 
   hsm4c_state_t const *current = NULL;
   hsm4c_state_t *my_sm = &my_states[ROOT];
-  hsm4c_map_stateconfig_to_states(_NUM_STATES, my_states, my_statecfgs);
+  hsm4c_assign_stateconfigs_to_states(_NUM_STATES, my_states, my_statecfgs);
   current = hsm4c_init(my_sm);
   current = hsm4c_run(my_sm, 1);              // B
   current = hsm4c_run(my_sm, HSM4C_NO_EVENT); // No change
