@@ -113,6 +113,14 @@ extern "C" {
   #define HSM4C_CONFIG_TRANSITION_FN 1
 #endif
 
+#ifndef HSM4C_CONFIG_LOG
+  #define HSM4C_CONFIG_LOG 1
+#endif
+
+#ifndef HSM4C_CONFIG_ASSERT
+  #define HSM4C_CONFIG_ASSERT 1
+#endif
+
 #ifndef ARRAY_SIZE
   /** Convenience macro to determine size of an array in case it is not available. */
   #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
@@ -332,6 +340,13 @@ hsm4c_state_t *hsm4c_init(hsm4c_state_t *initial);
  * @return        The new (leaf) state.
  */
 hsm4c_state_t *hsm4c_dispatch(hsm4c_state_t *current, hsm4c_event_t e);
+
+/** Get the name of a state if available
+ *
+ * @param state State to get name of if enabled & set.
+ * @return      Name of state or empty string if not enabled or set.
+ */
+char const *hsm4c_get_name(hsm4c_state_t const *state);
 
 #ifdef __cplusplus
 }
