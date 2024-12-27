@@ -1,55 +1,44 @@
-#include <stdio.h>
-
 #include "hsm4c.h"
+
+#include <stdio.h>
 
 /* ========================== */
 enum my_states { ROOT, A, A_H, A_HD, BRANCH, B, C, D, D_H, E, F, G, G_HD, GA, GB, _NUM_STATES };
 static hsm4c_state_t my_states[];
 
-static void state_a_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static void state_a_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static hsm4c_state_t *state_branch_run(hsm4c_state_t const *sm, hsm4c_event_t e) {
-  printf("%s\n", __func__);
-  return &my_states[D];
-};
-static void state_b_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static void state_b_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static void state_c_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static void state_c_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static hsm4c_state_t *state_b_run(hsm4c_state_t const *sm, hsm4c_event_t e) {
-  printf("%s\n", __func__);
-  //   return &my_states[C];
-  return NULL;
-};
-static void state_d_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static void state_d_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static void state_e_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static void state_e_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static void state_f_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static void state_f_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static hsm4c_state_t *state_f_run(hsm4c_state_t const *sm, hsm4c_event_t e) {
-  printf("%s\n", __func__);
-  //   return &my_states[B];
-  return NULL;
-};
-static void state_g_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static void state_g_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static void state_ga_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static void state_ga_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static void state_gb_entry(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static void state_gb_exit(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
+static void state_a_entry(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+static void state_a_exit(hsm4c_state_t *sm) { printf("%s\n", __func__); }
 
-static void tran_1(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static void tran_2(hsm4c_state_t const *sm) { printf("%s\n", __func__); }
-static bool guard_1(hsm4c_state_t const *sm) {
+static void state_b_entry(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+static void state_b_exit(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+static void state_c_entry(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+static void state_c_exit(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+
+static void state_d_entry(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+static void state_d_exit(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+static void state_e_entry(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+static void state_e_exit(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+static void state_f_entry(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+static void state_f_exit(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+
+static void state_g_entry(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+static void state_g_exit(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+static void state_ga_entry(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+static void state_ga_exit(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+static void state_gb_entry(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+static void state_gb_exit(hsm4c_state_t *sm) { printf("%s\n", __func__); }
+
+static void tran_1(hsm4c_event_t e) { printf("%s\n", __func__); }
+static void tran_2(hsm4c_event_t e) { printf("%s\n", __func__); }
+static bool guard_1(hsm4c_event_t e) {
   printf("%s\n", __func__);
   return true;
 }
-static bool guard_2(hsm4c_state_t const *sm) {
+static bool guard_2(hsm4c_event_t e) {
   printf("%s\n", __func__);
   return true;
 }
-static bool condition_1(hsm4c_state_t const *sm) {
+static bool condition_1(hsm4c_event_t e) {
   static int counter = 0;
   printf("%s\n", __func__);
   return counter++ >= 1 ? true : false;
@@ -64,9 +53,8 @@ static hsm4c_transition_t const my_transitions[] = {
     {&my_states[B], &my_states[A_HD], 6, tran_2, guard_2},
     {&my_states[F], &my_states[BRANCH], 7},
     {&my_states[E], &my_states[G_HD], 7},
-    {&my_states[GB], &my_states[GA], HSM4C_NO_EVENT, .guard_fn = condition_1},
-    {&my_states[GA], &my_states[A], HSM4C_NO_EVENT, .guard_fn = condition_1},
-    HSM4C_TRANSITIONS_END,
+    // {&my_states[GB], &my_states[GA], HSM4C_NO_EVENT, .guard_fn = condition_1},
+    // {&my_states[GA], &my_states[A], HSM4C_NO_EVENT, .guard_fn = condition_1},
 };
 static hsm4c_state_config_t const my_statecfgs[_NUM_STATES] = {
     [ROOT] =
