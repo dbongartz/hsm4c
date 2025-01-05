@@ -3,7 +3,9 @@
 #include <stdio.h>
 
 #if HSM4C_CONFIG_LOG
-  #define HSM4C_LOG(...) printf(__VA_ARGS__)
+  #ifndef HSM4C_LOG
+    #define HSM4C_LOG(...) printf(__VA_ARGS__)
+  #endif
 #else
   #define HSM4C_LOG(...)                                                                           \
     do {                                                                                           \
@@ -226,24 +228,6 @@ static hsm4c_state_t *do_transition(hsm4c_transition_t const *transition, hsm4c_
   }
 }
 
-static hsm4c_target_state_t get_target(hsm4c_transition_t const *transition, hsm4c_state_t *state,
-                                       hsm4c_event_t event) {
-  (void)event;
-
-  hsm4c_target_state_t target = transition->target.fixed;
-
-#if HSM4C_CONFIG_TARGET_CHOICE
-  if (transition->target_type == HSM4C_TARGET_CHOICE_FN) {
-    target = transition->target.choice_fn(event);
-  }
-#endif
-
-  // If state_next is NULL, it means that the transition is a self-transition.
-  target.state = target.state ? target.state : state;
-
-  return target;
-}
-
 /* -------- PUBLIC -------- */
 
 hsm4c_state_t *hsm4c_init(hsm4c_state_t *initial) {
@@ -271,18 +255,26 @@ hsm4c_state_t *hsm4c_init(hsm4c_state_t *initial) {
 }
 
 hsm4c_state_t *hsm4c_dispatch(hsm4c_state_t *state, hsm4c_event_t event) {
-  hsm4c_state_cfg_t const *cfg = state->cfg;
+  hsm4c_state_t *leaf = state;
+  bool transition_found = false;
 
-  for (size_t i = 0; i < cfg->num_transitions; ++i) {
-    hsm4c_transition_t const *transition = &cfg->transitions[i];
-    if (transition->event_id == event.id && check_guard(transition, event)) {
-      hsm4c_target_state_t target = get_target(transition, state, event);
-      do_transition(transition, state, target, event);
-      return target.state;
+#if HSM4C_CONFIG_AUTOMATIC_TRANSITIONS
+  do {
+#endif
+    transition_found = false;
+    for (size_t i = 0; !transition_found && i < leaf->cfg->num_transitions; ++i) {
+      hsm4c_transition_t const *transition = &leaf->cfg->transitions[i];
+      if (transition->event_id == event.id && check_guard(transition, event)) {
+        transition_found = true;
+        leaf = do_transition(transition, state, transition->target, event);
+      }
     }
-  }
+#if HSM4C_CONFIG_AUTOMATIC_TRANSITIONS
+    event.id = HSM4C_E_AUTOMATIC;
+  } while (transition_found);
+#endif
 
-  return state;
+  return leaf;
 }
 
 char const *hsm4c_get_name(hsm4c_state_t const *state) {

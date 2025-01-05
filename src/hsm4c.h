@@ -9,7 +9,6 @@
  * - External and internal (local) transitions.
  * - Automatic transitions. (WIP)
  * - Transitions with optional shallow and deep history.
- * - Transition with fixed target or via runtime choice.
  * - Relatively easy table based syntax.
  * - No third-party dependencies.
  * - Small RAM footprint per state (1 or 2 pointers).
@@ -51,9 +50,9 @@ extern "C" {
   #define HSM4C_CONFIG_EVENT_USER_DATA 1
 #endif
 
-#ifndef HSM4C_CONFIG_TARGET_CHOICE
-  /** Allow a `choice_fn` instead of a fixed target state for a transition. */
-  #define HSM4C_CONFIG_TARGET_CHOICE 1
+#ifndef HSM4C_CONFIG_TRANSITION_USER_DATA
+  /** Allow storage of a user data pointer in `hsm4c_transition_t`. */
+  #define HSM4C_CONFIG_TRANSITION_USER_DATA 1
 #endif
 
 #ifndef HSM4C_CONFIG_TRANSITION_GUARDS
@@ -68,7 +67,7 @@ extern "C" {
 
 #ifndef HSM4C_CONFIG_AUTOMATIC_TRANSITIONS
   /** Allow automaitc transitions after entering a state. */
-  #define HSM4C_CONFIG_AUTOMATIC_TRANSITIONS 0
+  #define HSM4C_CONFIG_AUTOMATIC_TRANSITIONS 1
 #endif
 
 #ifndef HSM4C_CONFIG_HIERARCHICAL
@@ -174,24 +173,6 @@ typedef void (*hsm4c_transition_fn)(hsm4c_event_t event);
 typedef bool (*hsm4c_guard_fn)(hsm4c_event_t event);
 #endif
 
-#if HSM4C_CONFIG_TARGET_CHOICE
-/** Choice function for transition.
- * @param event event triggering the transition.
- * @return The target (state + options) for this transition.
- */
-typedef hsm4c_target_state_t (*hsm4c_target_choice_fn)(hsm4c_event_t event);
-#endif
-
-#if HSM4C_CONFIG_TARGET_CHOICE
-/** Transition target type. */
-typedef enum hsm4c_target_type {
-  /** Target is a fixed state. (default) */
-  HSM4C_TARGET_FIXED_STATE = 0,
-  /** Call the `choice_fn` to determine the target at runtime. */
-  HSM4C_TARGET_CHOICE_FN,
-} hsm4c_target_type_e;
-#endif
-
 #if HSM4C_CONFIG_INTERNAL_TRANSITIONS
 /** Transition type */
 typedef enum hsm4c_transition_type {
@@ -288,14 +269,7 @@ struct hsm4c_transition {
   hsm4c_event_id_t event_id;
 
   /** Target of transition. */
-  union {
-    /** Fixed target: target_type == `HSM4C_TARGET_FIXED_STATE`. */
-    hsm4c_target_state_t fixed;
-#if HSM4C_CONFIG_TARGET_CHOICE
-    /** Choice function target: target_type == `HSM4C_TARGET_CHOICE_FN`. */
-    hsm4c_target_choice_fn choice_fn;
-#endif
-  } target;
+  hsm4c_target_state_t target;
 
 #if HSM4C_CONFIG_TRANSITION_GUARDS
   /** Guard condition. Can be NULL. */
@@ -307,9 +281,9 @@ struct hsm4c_transition {
   hsm4c_transition_fn transition_fn;
 #endif
 
-#if HSM4C_CONFIG_TARGET_CHOICE
-  /** Target type selection. Default: `HSM4C_TARGET_FIXED_STATE` */
-  hsm4c_target_type_e target_type;
+#if HSM4C_CONFIG_TRANSITION_USER_DATA
+  /** User data pointer. Not accessed by library. */
+  void *data;
 #endif
 };
 
