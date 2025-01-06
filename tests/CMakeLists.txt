@@ -23,4 +23,5 @@ target_link_libraries(test_hsm4c PRIVATE ${PROJECT_NAME} Catch2::Catch2WithMain 
 target_compile_features(test_hsm4c PRIVATE cxx_std_20 c_std_17)
 catch_discover_tests(test_hsm4c)
 
-add_custom_target(tests COMMAND ${CMAKE_CTEST_COMMAND} DEPENDS test_hsm4c test_hsm4c_conv)
+add_custom_target(ctest COMMAND ${CMAKE_CTEST_COMMAND} DEPENDS test_hsm4c)
+add_custom_target(catch2 COMMAND test_hsm4c --colour-mode ansi)
