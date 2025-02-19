@@ -1,20 +1,20 @@
-#include "hsm4c.h"
-
 #include <stdio.h>
 
-void entry_fn(void *ctx, hsm4c_state_t const *s) {
+#include "hsm4c.h"
+
+void entry_fn(void *ctx, hsm4c_state_t const *state) {
   (void)ctx;
 #if HSM4C_CONFIG_STATE_NAME
-  printf("entry: %s\n", s->name);
+  printf("entry: %s\n", state->name);
 #else
-  printf("entry: %p\n", (void *)s);
+  printf("entry: %p\n", (void *)state);
 #endif
 }
 
 int main(void) {
   enum my_states_e {
-    SROOT = HSM4C_STATE_ID_RESERVED,
-    S0 = 1,
+    SROOT = HSM4C_STATE_ID_ZERO,
+    S0,
     S01,
     NUM_STATES,
   };
@@ -48,7 +48,7 @@ int main(void) {
 #endif
 
   static hsm4c_state_t const states[NUM_STATES] = {
-      [HSM4C_STATE_ID_RESERVED] = HSM4C_STATE_ROOT(S0),
+      [HSM4C_STATE_ID_ROOT] = HSM4C_STATE_ROOT(S0),
       [S0] =
           {
 #if HSM4C_CONFIG_STATE_NAME
@@ -59,8 +59,7 @@ int main(void) {
               .compound.entry_fn = entry_fn,
 #endif
 #if !HSM4C_CONFIG_UNIFIED_TRANSITION_TABLE
-              .compound.transitions = s0t,
-              .compound.transitions_num = ARRAY_SIZE(s0t),
+              .compound.transitions = {s0t, ARRAY_SIZE(s0t)},
 #endif
           },
       [S01] =
@@ -81,26 +80,26 @@ int main(void) {
       .states_rt = states_rt,
       .num_states = ARRAY_SIZE(states),
 #if HSM4C_CONFIG_UNIFIED_TRANSITION_TABLE
-      .transitions = transitions,
-      .transitions_num = ARRAY_SIZE(transitions),
+      .transitions = {transitions, ARRAY_SIZE(transitions)},
 #endif
       .ctx = NULL,
   };
 
   hsm4c_t sm;
 
-  printf("hsm4c_t: %zu, hsm4c_cfg_t: %zu, hsm4c_state_t: %zu, hsm4c_state_rt_t: %zu, "
-         "hsm4c_transition_t: %zu, hsm4c_trigger_t: %zu\n",
-         sizeof(hsm4c_t), sizeof(hsm4c_cfg_t), sizeof(hsm4c_state_t), sizeof(hsm4c_state_rt_t),
-         sizeof(hsm4c_transition_t), sizeof(hsm4c_trigger_t));
+  printf(
+      "sizeof: hsm4c_t: %zu, hsm4c_cfg_t: %zu, hsm4c_state_t: %zu, hsm4c_state_rt_t: %zu, "
+      "hsm4c_transition_t: %zu, hsm4c_trigger_t: %zu\n",
+      sizeof(hsm4c_t), sizeof(hsm4c_cfg_t), sizeof(hsm4c_state_t), sizeof(hsm4c_state_rt_t),
+      sizeof(hsm4c_transition_t), sizeof(hsm4c_trigger_t));
 
-  hsm4c_init(&sm, &sm_cfg);
-  hsm4c_print_states(&sm);
+  hsm4c_start(&sm, &sm_cfg);
+  hsm4c_print_current_state_branch(&sm);
 
-  hsm4c_result_e result;
+  hsm4c_result_e result = HSM4C_OK;
   do {
     result = hsm4c_run2completion(&sm, (hsm4c_trigger_t){.normal.id = 0});
   } while (result == HSM4C_DEFERED);
 
-  hsm4c_print_states(&sm);
+  hsm4c_print_current_state_branch(&sm);
 }

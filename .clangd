@@ -1,2 +1,11 @@
 CompileFlags:
   Remove: [-fno-reorder-functions, -fno-freestanding, -mfp16-format=ieee]
+
+Diagnostics:
+  UnusedIncludes: Strict
+  MissingIncludes: Strict
+  ClangTidy:
+    FastCheckFilter: None
+
+Index:
+  StandardLibrary: Yes

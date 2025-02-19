@@ -1,0 +1,18 @@
+---
+Checks: >
+    clang-diagnostic*,
+    clang-analyzer*,
+    *,
+    -llvm*,
+    -altera*,
+    -fuchsia*,
+    -cppcoreguidelines-macro-to-enum,
+    # -readability-container-data-pointer,
+
+CheckOptions:
+    readability-identifier-length.IgnoredParameterNames: ^(id)$
+    readability-identifier-length.IgnoredVariableNames: ^(id)$
+    readability-identifier-length.MinimumParameterNameLength: 2
+    readability-identifier-length.MinimumVariableNameLength: 2
+
+HeaderFilterRegex: '.*'
