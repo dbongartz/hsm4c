@@ -1,7 +1,8 @@
 # hsm4c
 
 [![CI](https://github.com/dbongartz/hsm4c/actions/workflows/ci.yml/badge.svg)](https://github.com/dbongartz/hsm4c/actions/workflows/ci.yml)
-[![Docs](https://github.com/dbongartz/hsm4c/actions/workflows/docs.yml/badge.svg)](https://dbongartz.github.io/hsm4c/)
+[![Docs](https://github.com/dbongartz/hsm4c/actions/workflows/docs.yml/badge.svg)](https://github.com/dbongartz/hsm4c/actions/workflows/docs.yml)
+[![Code Coverage](https://github.com/dbongartz/hsm4c/actions/workflows/coverage.yml/badge.svg)](https://github.com/dbongartz/hsm4c/actions/workflows/coverage.yml)
 
 Hierarchical state machine (statechart) library in C.
 
@@ -88,6 +89,13 @@ examples/    examples, also buildable against an installed package
 docs/        Doxygen setup
 cmake/       CMake helpers and package config
 ```
+
+### Code coverage
+
+The [Code Coverage](.github/workflows/coverage.yml) workflow uploads a Cobertura report to
+[GitHub Code Quality](https://docs.github.com/en/code-security/how-tos/maintain-quality-code/set-up-code-coverage),
+which comments the line coverage change on pull requests. Pushes to `main` provide the
+baseline. Code Quality must be enabled in the repository settings.
 
 ## Releasing
 
