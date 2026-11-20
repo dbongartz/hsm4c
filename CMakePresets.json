@@ -84,6 +84,36 @@
       }
     },
     {
+      "name": "cortex-m",
+      "hidden": true,
+      "displayName": "ARM Cortex-M, library only",
+      "inherits": "base",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel",
+        "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
+        "HSM4C_BUILD_TESTS": "OFF",
+        "HSM4C_BUILD_EXAMPLES": "OFF",
+        "HSM4C_INSTALL": "OFF"
+      }
+    },
+    {
+      "name": "cortex-m0plus",
+      "displayName": "ARM Cortex-M0+ (Thumb, -Os), library only",
+      "inherits": "cortex-m",
+      "cacheVariables": {
+        "CMAKE_C_FLAGS": "-mcpu=cortex-m0plus -mthumb -fcallgraph-info=su"
+      }
+    },
+    {
+      "name": "cortex-m4",
+      "displayName": "ARM Cortex-M4 (Thumb, -Os), library only",
+      "inherits": "cortex-m",
+      "cacheVariables": {
+        "CMAKE_C_FLAGS": "-mcpu=cortex-m4 -mthumb -fcallgraph-info=su"
+      }
+    },
+    {
       "name": "coverage",
       "displayName": "GCC with coverage instrumentation",
       "inherits": "gcc",
@@ -148,6 +178,14 @@
     {
       "name": "fuzz",
       "configurePreset": "fuzz"
+    },
+    {
+      "name": "cortex-m0plus",
+      "configurePreset": "cortex-m0plus"
+    },
+    {
+      "name": "cortex-m4",
+      "configurePreset": "cortex-m4"
     },
     {
       "name": "coverage",
