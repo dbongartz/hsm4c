@@ -1,4 +1,4 @@
-@startuml test_hsm4c statchart
+@startuml test_hsm4c statechart
 
 state ROOT {
     state A {
@@ -9,8 +9,8 @@ state ROOT {
         }
         state AB
         state AC
-        state A_H <<history*>>
-        state A_DH <<history>>
+        state A_H <<history>>
+        state A_DH <<history*>>
         state A_CHOICE <<choice>>
         [*] -> AA
         A_H --> AB : [no_history]
@@ -24,6 +24,7 @@ state ROOT {
         [*] -> BA
         B_H --> BC : [no_history]
     }
+    state C
     [*] -> A
 }
 
@@ -43,8 +44,9 @@ A_CHOICE -> C : (2) [t_choice_B] / t_action()
 A -> B_H : EV_7 [t_guard] / t_action()
 AAA --> AAA : EV_8 [t_guard] / t_action()
 AA -> AAB : EV_9 [t_guard] / t_action()
-AA -> AAB : EV_10 [t_guard] / t_action() <<internal>>
-AAB --> AA : EV_12 [t_guard] / t_action()
-AAA --> AAA : EV_11 [t_guard] / t_action()
+AA -> AAB : EV_10 [t_guard] / t_action() <<local>>
+AAB --> AA : EV_12 [t_guard] / t_action() <<local, behaves external>>
+A --> A : EV_13 [t_guard] / t_action() <<internal>>
+AAA --> AAA : EV_11 [t_guard] / t_action() <<internal>>
 
 @enduml

@@ -1,10 +1,18 @@
+add_library(hsm4c)
+add_library(hsm4c::hsm4c ALIAS hsm4c)
 
-include_directories(lib)
-include_directories(/opt/ruby/3.0.3/lib/ruby/gems/3.0.0/gems/ceedling-0.31.1/vendor/unity/src/)
+target_sources(
+  hsm4c
+  PRIVATE hsm4c/hsm4c.c
+  PUBLIC FILE_SET HEADERS BASE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}" FILES hsm4c/hsm4c.h)
 
-add_executable(hsm4c_demo hsm4c_demo.c)
-target_link_libraries(hsm4c_demo PUBLIC hsm4c)
+# Public header needs C99 (bool, designated initializers, VLA parameter declarations)
+target_compile_features(hsm4c PUBLIC c_std_99)
 
-set_property(TARGET hsm4c_demo PROPERTY C_STANDARD 17)
+set_target_properties(
+  hsm4c
+  PROPERTIES C_EXTENSIONS OFF
+             VERSION ${PROJECT_VERSION}
+             SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR})
 
-target_include_directories(hsm4c_demo PUBLIC "${PROJECT_SOURCE_DIR}/lib")
+hsm4c_target_warnings(hsm4c)

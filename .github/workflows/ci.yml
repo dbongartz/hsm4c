@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-test:
+    name: Build & test (${{ matrix.compiler }}, ${{ matrix.library }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        library: [static, shared]
+    env:
+      PRESET: ci-${{ matrix.compiler }}
+      SHARED: ${{ matrix.library == 'shared' && 'ON' || 'OFF' }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Configure
+        run: cmake --preset "$PRESET" -DBUILD_SHARED_LIBS="$SHARED"
+      - name: Build
+        run: cmake --build --preset "$PRESET"
+      - name: Test
+        run: ctest --preset "$PRESET"
+      - name: Install
+        run: cmake --install "build/$PRESET" --prefix "$RUNNER_TEMP/prefix"
+      - name: Build examples against installed package
+        run: |
+          cmake -S examples -B "$RUNNER_TEMP/examples" -G Ninja \
+            -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/prefix" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+          cmake --build "$RUNNER_TEMP/examples"
+          "$RUNNER_TEMP/examples/hsm4c_demo"
+
+  sanitize:
+    name: Sanitizers (ASan + UBSan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Configure, build and test
+        run: cmake --workflow --preset sanitize
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install tools
+        run: |
+          sudo apt-get update && sudo apt-get install -y ninja-build
+          pipx install gcovr==8.8
+      - name: Configure, build and test
+        run: cmake --workflow --preset coverage
+      - name: Coverage report
+        # Summary on the run page, text report in the log, HTML report as artifact
+        run: |
+          mkdir -p coverage
+          gcovr --root . --filter src/ build/coverage \
+            --markdown-summary "$GITHUB_STEP_SUMMARY" \
+            --html-details coverage/index.html \
+            --txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: coverage/
+
+  lint:
+    name: Lint (clang-format, clang-tidy)
+    # Pinned to keep the clang tool versions stable
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang-18 clang-format-18 clang-tidy-18
+      - name: clang-format
+        run: git ls-files '*.c' '*.h' '*.cpp' | xargs clang-format-18 --dry-run --Werror
+      - name: Configure
+        run: cmake --preset lint -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18
+      - name: clang-tidy
+        run: run-clang-tidy-18 -quiet -p build/lint "$PWD/(src|test|examples)/"
+
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y ninja-build doxygen
+      - name: Build docs (warnings are errors)
+        run: |
+          cmake --preset docs
+          cmake --build --preset docs
