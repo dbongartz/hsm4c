@@ -59,6 +59,21 @@
       }
     },
     {
+      "name": "minimal",
+      "displayName": "GCC, all optional features off, smallest types",
+      "inherits": "ci-gcc",
+      "cacheVariables": {
+        "HSM4C_BUILD_EXAMPLES": "OFF",
+        "HSM4C_CONFIG_STATE_NAMES": "OFF",
+        "HSM4C_CONFIG_RUN_FN": "OFF",
+        "HSM4C_CONFIG_GUARDS": "OFF",
+        "HSM4C_CONFIG_ACTIONS": "OFF",
+        "HSM4C_CONFIG_VALIDATE": "OFF",
+        "HSM4C_EVENT_QUEUE_SIZE": "1",
+        "HSM4C_STATE_ID_TYPE": "uint8_t"
+      }
+    },
+    {
       "name": "coverage",
       "displayName": "GCC with coverage instrumentation",
       "inherits": "gcc",
@@ -117,6 +132,10 @@
       "configurePreset": "sanitize"
     },
     {
+      "name": "minimal",
+      "configurePreset": "minimal"
+    },
+    {
       "name": "coverage",
       "configurePreset": "coverage"
     },
@@ -172,6 +191,11 @@
       "name": "sanitize",
       "inherits": "base",
       "configurePreset": "sanitize"
+    },
+    {
+      "name": "minimal",
+      "inherits": "base",
+      "configurePreset": "minimal"
     },
     {
       "name": "coverage",
@@ -233,6 +257,23 @@
         {
           "type": "test",
           "name": "sanitize"
+        }
+      ]
+    },
+    {
+      "name": "minimal",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "minimal"
+        },
+        {
+          "type": "build",
+          "name": "minimal"
+        },
+        {
+          "type": "test",
+          "name": "minimal"
         }
       ]
     },

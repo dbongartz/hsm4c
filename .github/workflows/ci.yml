@@ -44,6 +44,16 @@ jobs:
           cmake --build "$RUNNER_TEMP/examples"
           "$RUNNER_TEMP/examples/hsm4c_demo"
 
+  minimal:
+    name: Minimal configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Configure, build and test (all optional features off)
+        run: cmake --workflow --preset minimal
+
   sanitize:
     name: Sanitizers (ASan + UBSan)
     runs-on: ubuntu-latest

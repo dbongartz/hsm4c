@@ -55,23 +55,50 @@
 extern "C" {
 #endif
 
+/*
+ * -------- Configuration --------
+ *
+ * Set these with the CMake cache variables of the same name, which define them for the library
+ * and everything linking hsm4c::hsm4c. Without CMake, define them the same way for the library
+ * and all code including this header: most of them change the layout of the types below.
+ */
+
+#ifndef HSM4C_CONFIG_STATE_NAMES
+/** \brief 1: hsm4c_state_t has a name field. */
+#define HSM4C_CONFIG_STATE_NAMES 1
+#endif
+
+#ifndef HSM4C_CONFIG_RUN_FN
+/** \brief 1: hsm4c_state_t has a run function, see hsm4c_run_fn_t. */
+#define HSM4C_CONFIG_RUN_FN 1
+#endif
+
+#ifndef HSM4C_CONFIG_GUARDS
+/** \brief 1: hsm4c_transition_t has a guard, see hsm4c_guard_fn_t. */
+#define HSM4C_CONFIG_GUARDS 1
+#endif
+
+#ifndef HSM4C_CONFIG_ACTIONS
+/** \brief 1: hsm4c_transition_t has an action, see hsm4c_action_fn_t. */
+#define HSM4C_CONFIG_ACTIONS 1
+#endif
+
+#ifndef HSM4C_CONFIG_VALIDATE
+/** \brief 1: hsm4c_init() checks the chart with hsm4c_validate(). Library only. */
+#define HSM4C_CONFIG_VALIDATE 1
+#endif
+
 #ifndef HSM4C_MAX_TRANSITIONS
 /**
  * \brief Maximum number of transitions taken by one hsm4c_init() or hsm4c_run() call.
  *
- * Stops endless chains, e.g. a cycle of always enabled automatic transitions. Define it when
- * compiling the library to change it.
+ * Stops endless chains, e.g. a cycle of always enabled automatic transitions. Library only.
  */
 #define HSM4C_MAX_TRANSITIONS 64
 #endif
 
 #ifndef HSM4C_EVENT_QUEUE_SIZE
-/**
- * \brief Capacity of the internal event queue, see hsm4c_raise(). 1 to 255.
- *
- * The queue is part of hsm4c_t, so the value must be the same for the library and all code
- * including this header.
- */
+/** \brief Capacity of the internal event queue in hsm4c_t, see hsm4c_raise(). 1 to 255. */
 #define HSM4C_EVENT_QUEUE_SIZE 8
 #endif
 
@@ -80,7 +107,7 @@ extern "C" {
 #endif
 
 #ifndef HSM4C_STATE_ID_TYPE
-/** \brief Unsigned integer type of state IDs. Define it before including to change it. */
+/** \brief Unsigned integer type of state IDs. Limits the number of states per chart. */
 #define HSM4C_STATE_ID_TYPE uint16_t
 #endif
 
@@ -280,17 +307,22 @@ typedef bool (*hsm4c_guard_fn_t)(hsm4c_t const *sm, hsm4c_event_t const *event);
 /**
  * \brief Transition table row. The source is the state owning the table.
  *
- * Positional initializers read as "on event, go to target, if guard, do action".
+ * Positional initializers read as "on event, go to target, if guard, do action". Use designated
+ * initializers when compiling with HSM4C_CONFIG_GUARDS or HSM4C_CONFIG_ACTIONS set to 0.
  */
 struct hsm4c_transition {
   /** \brief Event the transition reacts to. Must be positive or HSM4C_NO_EVENT. */
   hsm4c_event_id_t event;
   /** \brief Target state. HSM4C_NO_STATE for an internal (targetless) transition. */
   hsm4c_state_id_t to;
+#if HSM4C_CONFIG_GUARDS
   /** \brief Guard. Called when the event matches. NULL means always true. (optional) */
   hsm4c_guard_fn_t guard_fn;
+#endif
+#if HSM4C_CONFIG_ACTIONS
   /** \brief Action. Called after all exits, before all entries. (optional) */
   hsm4c_action_fn_t action_fn;
+#endif
   /** \brief Transition type. Default: HSM4C_TRANSITION_EXTERNAL. */
   hsm4c_transition_type_t type;
 };
@@ -301,8 +333,10 @@ struct hsm4c_transition {
 
 /** \brief Constant state configuration. Element of a chart's state array. */
 struct hsm4c_state {
+#if HSM4C_CONFIG_STATE_NAMES
   /** \brief Name of the state. Not used by the library. (optional) */
   char const *name;
+#endif
   /** \brief Parent state. Ignored for the root. Default: HSM4C_ROOT. */
   hsm4c_state_id_t parent;
   /**
@@ -315,8 +349,10 @@ struct hsm4c_state {
   hsm4c_state_type_t type;
   /** \brief Entry function. Called after the exits and the transition action. (optional) */
   hsm4c_entry_fn_t entry_fn;
+#if HSM4C_CONFIG_RUN_FN
   /** \brief Run function. Can trigger a transition. See hsm4c_run_fn_t. (optional) */
   hsm4c_run_fn_t run_fn;
+#endif
   /** \brief Exit function. Called after the guard, before the transition action. (optional) */
   hsm4c_exit_fn_t exit_fn;
   /**

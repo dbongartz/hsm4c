@@ -11,6 +11,12 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#ifndef HSM4C_ASSERT
+#include <assert.h>
+/** \brief Checks for programming errors, e.g. NULL arguments. Define it to use your own. */
+#define HSM4C_ASSERT(expr) assert(expr)
+#endif
+
 /* -------- Private -------- */
 
 /** \brief Configuration of a state. */
@@ -154,6 +160,28 @@ static void execute_transition(hsm4c_t *sm, hsm4c_state_id_t from, hsm4c_state_i
   sm->leaf = enter_initial(sm, target);
 }
 
+/** \brief Evaluates the guard of a transition. No guard means enabled. */
+static bool guard_ok(hsm4c_t const *sm, hsm4c_transition_t const *t, hsm4c_event_t const *event) {
+#if HSM4C_CONFIG_GUARDS
+  return !t->guard_fn || t->guard_fn(sm, event);
+#else
+  (void)sm;
+  (void)t;
+  (void)event;
+  return true;
+#endif
+}
+
+/** \brief Action of a transition, NULL if none. */
+static hsm4c_action_fn_t action_of(hsm4c_transition_t const *t) {
+#if HSM4C_CONFIG_ACTIONS
+  return t->action_fn;
+#else
+  (void)t;
+  return NULL;
+#endif
+}
+
 /** \brief Finds an enabled transition for event in the active branch, deepest state first. */
 static hsm4c_transition_t const *find_transition(hsm4c_t const *sm, hsm4c_event_id_t id,
                                                  hsm4c_event_t const *event,
@@ -162,7 +190,7 @@ static hsm4c_transition_t const *find_transition(hsm4c_t const *sm, hsm4c_event_
   for (;;) {
     hsm4c_transition_t const *t = cfg(sm, s)->transitions;
     for (; t && t->type != HSM4C_TRANSITION_TABLE_END; ++t) {
-      if (t->event == id && (!t->guard_fn || t->guard_fn(sm, event))) {
+      if (t->event == id && guard_ok(sm, t, event)) {
         *source = s;
         return t;
       }
@@ -180,6 +208,11 @@ static hsm4c_transition_t const *find_transition(hsm4c_t const *sm, hsm4c_event_
  * \return The first requested state change, HSM4C_NO_STATE if none.
  */
 static hsm4c_state_id_t run_states(hsm4c_t *sm, hsm4c_event_t const *event) {
+#if !HSM4C_CONFIG_RUN_FN
+  (void)sm;
+  (void)event;
+  return HSM4C_NO_STATE;
+#else
   hsm4c_state_id_t s = sm->leaf;
   for (;;) {
     if (cfg(sm, s)->run_fn) {
@@ -193,6 +226,7 @@ static hsm4c_state_id_t run_states(hsm4c_t *sm, hsm4c_event_t const *event) {
     }
     s = parent_of(sm, s);
   }
+#endif
 }
 
 /**
@@ -219,7 +253,7 @@ static hsm4c_result_t take_event(hsm4c_t *sm, hsm4c_event_t const *event, unsign
   if (!t) {
     return HSM4C_OK;
   }
-  return take(sm, source, t->to, t->type, t->action_fn, event, taken);
+  return take(sm, source, t->to, t->type, action_of(t), event, taken);
 }
 
 /**
@@ -237,7 +271,7 @@ static hsm4c_result_t settle(hsm4c_t *sm, hsm4c_event_t *event, bool run_fns, un
     hsm4c_state_id_t source = HSM4C_ROOT;
     hsm4c_transition_t const *const t = find_transition(sm, HSM4C_NO_EVENT, event, &source);
     if (t) {
-      hsm4c_result_t const r = take(sm, source, t->to, t->type, t->action_fn, event, taken);
+      hsm4c_result_t const r = take(sm, source, t->to, t->type, action_of(t), event, taken);
       if (r != HSM4C_OK) {
         return r;
       }
@@ -335,9 +369,14 @@ static bool state_valid(hsm4c_chart_t const *chart, hsm4c_state_id_t id) {
   if (id == HSM4C_ROOT && is_pseudo(state)) {
     return false;
   }
-  if (is_pseudo(state) && (state->entry_fn || state->exit_fn || state->run_fn)) {
+  if (is_pseudo(state) && (state->entry_fn || state->exit_fn)) {
     return false;
   }
+#if HSM4C_CONFIG_RUN_FN
+  if (is_pseudo(state) && state->run_fn) {
+    return false;
+  }
+#endif
   if (state->initial >= chart->num_states) {
     return false;
   }
@@ -393,10 +432,13 @@ hsm4c_result_t hsm4c_validate(hsm4c_chart_t const *chart, hsm4c_state_id_t *stat
 
 hsm4c_result_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_id_t *active,
                           void *ctx) {
+  HSM4C_ASSERT(sm && chart && active);
+#if HSM4C_CONFIG_VALIDATE
   hsm4c_result_t const valid = hsm4c_validate(chart, NULL);
   if (valid != HSM4C_OK) {
     return valid;
   }
+#endif
 
   sm->chart = chart;
   sm->active = active;
@@ -419,6 +461,8 @@ hsm4c_result_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_i
 }
 
 hsm4c_result_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event, void *data) {
+  HSM4C_ASSERT(sm && sm->chart);
+  HSM4C_ASSERT(event >= 0);
   if (sm->busy) {
     return HSM4C_ERR_BUSY;
   }
@@ -450,6 +494,8 @@ hsm4c_result_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event, void *data) {
 }
 
 hsm4c_result_t hsm4c_raise(hsm4c_t *sm, hsm4c_event_id_t event, void *data) {
+  HSM4C_ASSERT(sm);
+  HSM4C_ASSERT(event > 0);
   if (sm->queue_len >= HSM4C_EVENT_QUEUE_SIZE) {
     return HSM4C_ERR_QUEUE_FULL;
   }
@@ -460,11 +506,18 @@ hsm4c_result_t hsm4c_raise(hsm4c_t *sm, hsm4c_event_id_t event, void *data) {
   return HSM4C_OK;
 }
 
-void *hsm4c_ctx(hsm4c_t const *sm) { return sm->ctx; }
+void *hsm4c_ctx(hsm4c_t const *sm) {
+  HSM4C_ASSERT(sm);
+  return sm->ctx;
+}
 
-hsm4c_state_id_t hsm4c_current(hsm4c_t const *sm) { return sm->leaf; }
+hsm4c_state_id_t hsm4c_current(hsm4c_t const *sm) {
+  HSM4C_ASSERT(sm);
+  return sm->leaf;
+}
 
 bool hsm4c_is_active(hsm4c_t const *sm, hsm4c_state_id_t state) {
+  HSM4C_ASSERT(sm && state < sm->chart->num_states);
   hsm4c_state_id_t s = sm->leaf;
   for (;;) {
     if (s == state) {
