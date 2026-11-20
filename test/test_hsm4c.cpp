@@ -15,6 +15,7 @@
 
 #include "test_chart.h"
 
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -38,13 +39,27 @@ static hsm4c_event_t run_event{};
 static hsm4c_event_t x_auto_event{};
 static hsm4c_result_t raise_result = HSM4C_OK;
 static hsm4c_result_t reenter_result = HSM4C_OK;
+/* Optional checks run from the entry, exit and action fakes */
+static std::function<void(hsm4c_t *, hsm4c_state_id_t)> entry_probe;
+static std::function<void(hsm4c_t *, hsm4c_state_id_t)> exit_probe;
+static std::function<void(hsm4c_t *)> action_probe;
 
 static std::string name(hsm4c_chart_t const &c, int s) { return c.states[s].name; }
 static std::string name(hsm4c_t const *sm, hsm4c_state_id_t s) { return name(*sm->chart, s); }
 
 extern "C" {
-void s_entry(hsm4c_t *sm, hsm4c_state_id_t state) { calls.push_back("+" + name(sm, state)); }
-void s_exit(hsm4c_t *sm, hsm4c_state_id_t state) { calls.push_back("-" + name(sm, state)); }
+void s_entry(hsm4c_t *sm, hsm4c_state_id_t state) {
+  calls.push_back("+" + name(sm, state));
+  if (entry_probe) {
+    entry_probe(sm, state);
+  }
+}
+void s_exit(hsm4c_t *sm, hsm4c_state_id_t state) {
+  calls.push_back("-" + name(sm, state));
+  if (exit_probe) {
+    exit_probe(sm, state);
+  }
+}
 hsm4c_state_id_t s_run(hsm4c_t *sm, hsm4c_state_id_t state, hsm4c_event_t const *event) {
   run_event = *event;
   calls.push_back(name(sm, state) + ".run(" + std::to_string(event->id) + ")");
@@ -59,6 +74,9 @@ bool t_guard(hsm4c_t const * /*sm*/, hsm4c_event_t const *event) {
 void t_action(hsm4c_t *sm, hsm4c_event_t const *event) {
   action_ctx = hsm4c_ctx(sm);
   action_event = *event;
+  if (action_probe) {
+    action_probe(sm);
+  }
   calls.push_back("act");
 }
 bool t_choice_A(hsm4c_t const * /*sm*/, hsm4c_event_t const * /*event*/) {
@@ -101,6 +119,8 @@ struct Fixture {
     action_ctx = nullptr;
     guard_event = action_event = run_event = x_auto_event = hsm4c_event_t{};
     raise_result = reenter_result = HSM4C_OK;
+    entry_probe = exit_probe = nullptr;
+    action_probe = nullptr;
   }
 
   /** \brief Init the chart and run the given events without recording calls. */
@@ -165,6 +185,27 @@ TEST_CASE_FIXTURE(Fixture, "callbacks get the user context") {
   prepare();
   run(EV_1);
   CHECK(action_ctx == &ctx);
+}
+
+TEST_CASE_FIXTURE(Fixture, "states are active during their entry and exit functions") {
+  std::vector<std::string> seen;
+  auto probe = [&](char const *when, hsm4c_t *m, hsm4c_state_id_t state) {
+    seen.push_back(std::string(when) + name(m, state) +
+                   (hsm4c_is_active(m, state) ? " active" : "") + " in " +
+                   name(m, hsm4c_current(m)));
+  };
+  entry_probe = [&](hsm4c_t *m, hsm4c_state_id_t s) { probe("+", m, s); };
+  exit_probe = [&](hsm4c_t *m, hsm4c_state_id_t s) { probe("-", m, s); };
+  action_probe = [&](hsm4c_t *m) { seen.push_back("act in " + name(m, hsm4c_current(m))); };
+
+  CHECK(hsm4c_init(&sm, &chart, active, &ctx) == HSM4C_OK);
+  CHECK(seen == std::vector<std::string>{"+ROOT active in ROOT", "+A active in A",
+                                         "+AA active in AA", "+AAA active in AAA"});
+
+  seen.clear();
+  run(EV_1); // A -> B
+  CHECK(seen == std::vector<std::string>{"-AAA active in AAA", "-AA active in AA", "-A active in A",
+                                         "act in ROOT", "+B active in B", "+BA active in BA"});
 }
 
 TEST_CASE_FIXTURE(Fixture, "callbacks get the event and its data") {

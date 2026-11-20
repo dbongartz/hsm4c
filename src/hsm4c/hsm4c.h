@@ -255,6 +255,9 @@ typedef enum hsm4c_reserved_event {
 /**
  * \brief Entry function prototype.
  *
+ * The state is already active when its entry function is called, its not yet entered
+ * descendants are not.
+ *
  * \param sm      Machine.
  * \param state   State being entered.
  */
@@ -282,6 +285,9 @@ typedef hsm4c_state_id_t (*hsm4c_run_fn_t)(hsm4c_t *sm, hsm4c_state_id_t state,
 /**
  * \brief Exit function prototype.
  *
+ * The state is still active when its exit function is called, its descendants are already
+ * exited.
+ *
  * \param sm      Machine.
  * \param state   State being exited.
  */
@@ -289,6 +295,9 @@ typedef void (*hsm4c_exit_fn_t)(hsm4c_t *sm, hsm4c_state_id_t state);
 
 /**
  * \brief Transition action prototype.
+ *
+ * Called after all exits and before all entries: only the states above the transition's
+ * common ancestor are active.
  *
  * \param sm      Machine.
  * \param event   Event being processed. For automatic transitions the event passed to
@@ -493,6 +502,9 @@ void *hsm4c_ctx(hsm4c_t const *sm);
 /**
  * \brief Gets the active leaf state.
  *
+ * During a transition, i.e. in entry, exit and action callbacks, the deepest active state: states
+ * are exited and entered one by one.
+ *
  * \param sm      Machine.
  *
  * \return        Active leaf state.
@@ -501,6 +513,8 @@ hsm4c_state_id_t hsm4c_current(hsm4c_t const *sm);
 
 /**
  * \brief Checks whether a state is active, i.e. the active leaf or one of its ancestors.
+ *
+ * Can be used in callbacks, see hsm4c_current().
  *
  * \param sm      Machine.
  * \param state   State to check.

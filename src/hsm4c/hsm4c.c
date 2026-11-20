@@ -78,18 +78,18 @@ static void leave(hsm4c_t *sm, hsm4c_state_id_t s) {
 }
 
 /**
- * \brief Enters the initial states below s down to a leaf and sets them active.
+ * \brief Enters the initial states below the active leaf s down to a leaf.
  *
- * \return The reached leaf.
+ * Each state is active before its entry function is called (SCXML).
  */
-static hsm4c_state_id_t enter_initial(hsm4c_t *sm, hsm4c_state_id_t s) {
+static void enter_initial(hsm4c_t *sm, hsm4c_state_id_t s) {
   while (cfg(sm, s)->initial != HSM4C_NO_STATE) {
     sm->active[s] = cfg(sm, s)->initial;
     s = cfg(sm, s)->initial;
+    sm->leaf = s;
     enter(sm, s);
   }
   sm->active[s] = HSM4C_NO_STATE;
-  return s;
 }
 
 /** \brief Depending on the target's type, returns the state to actually enter. */
@@ -134,9 +134,11 @@ static void execute_transition(hsm4c_t *sm, hsm4c_state_id_t from, hsm4c_state_i
       (type == HSM4C_TRANSITION_LOCAL && is_descendant(sm, target, from)) ? from
                                                                           : lcca(sm, from, target);
 
-  // Exit all states on the active branch below the domain, leaf first
-  for (hsm4c_state_id_t s = sm->leaf; s != domain; s = parent_of(sm, s)) {
-    leave(sm, s);
+  // Exit all states on the active branch below the domain, leaf first. Each state is active
+  // while its exit function is called (SCXML).
+  while (sm->leaf != domain) {
+    leave(sm, sm->leaf);
+    sm->leaf = parent_of(sm, sm->leaf);
   }
 
   // Set the target branch active below the domain
@@ -149,15 +151,15 @@ static void execute_transition(hsm4c_t *sm, hsm4c_state_id_t from, hsm4c_state_i
     action(sm, event);
   }
 
-  // Enter the target branch down to the target
-  hsm4c_state_id_t s = domain;
+  // Enter the target branch down to the target. Each state is active before its entry function
+  // is called (SCXML).
   do {
-    s = sm->active[s];
-    enter(sm, s);
-  } while (s != target);
+    sm->leaf = sm->active[sm->leaf];
+    enter(sm, sm->leaf);
+  } while (sm->leaf != target);
 
   // Enter initial states down to a leaf
-  sm->leaf = enter_initial(sm, target);
+  enter_initial(sm, target);
 }
 
 /** \brief Evaluates the guard of a transition. No guard means enabled. */
@@ -450,8 +452,9 @@ hsm4c_result_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_i
     active[i] = HSM4C_NO_STATE;
   }
 
+  sm->leaf = HSM4C_ROOT;
   enter(sm, HSM4C_ROOT);
-  sm->leaf = enter_initial(sm, HSM4C_ROOT);
+  enter_initial(sm, HSM4C_ROOT);
 
   hsm4c_event_t current = {HSM4C_NO_EVENT, NULL};
   unsigned taken = 0;
