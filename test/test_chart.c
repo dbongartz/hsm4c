@@ -192,6 +192,11 @@ static hsm4c_transition_t const transitions_xpa[] = {
     {EV_2, XQ, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
     {EV_3, HSM4C_NO_STATE, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
     {EV_6, XL1, NULL, NULL, HSM4C_TRANSITION_EXTERNAL},
+    {EV_7, XPB, NULL, x_raise, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
+};
+static hsm4c_transition_t const transitions_xpb[] = {
+    {EV_8, XR, NULL, NULL, HSM4C_TRANSITION_EXTERNAL},
     HSM4C_TRANSITIONS_END,
 };
 /* Endless cycle of automatic transitions */
@@ -210,7 +215,7 @@ static hsm4c_state_t const xstates[NUM_XSTATES] = {
     [XROOT] = XSTATE("XROOT", .initial = XP, .transitions = transitions_xroot),
     [XP] = XSTATE("XP", .parent = XROOT, .initial = XPA, .transitions = transitions_xp),
     [XPA] = XSTATE("XPA", .parent = XP, .transitions = transitions_xpa),
-    [XPB] = XSTATE("XPB", .parent = XP),
+    [XPB] = XSTATE("XPB", .parent = XP, .transitions = transitions_xpb),
     [XQ] = XSTATE("XQ", .parent = XROOT),
     [XR] = XSTATE("XR", .parent = XROOT),
     [XL1] = XSTATE("XL1", .parent = XROOT, .transitions = transitions_xl1),

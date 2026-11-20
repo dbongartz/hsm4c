@@ -36,6 +36,8 @@ static hsm4c_event_t guard_event{};
 static hsm4c_event_t action_event{};
 static hsm4c_event_t run_event{};
 static hsm4c_event_t x_auto_event{};
+static hsm4c_result_t raise_result = HSM4C_OK;
+static hsm4c_result_t reenter_result = HSM4C_OK;
 
 static std::string name(hsm4c_chart_t const &c, int s) { return c.states[s].name; }
 static std::string name(hsm4c_t const *sm, hsm4c_state_id_t s) { return name(*sm->chart, s); }
@@ -67,6 +69,11 @@ bool t_choice_B(hsm4c_t const * /*sm*/, hsm4c_event_t const * /*event*/) {
   choice_B_called++;
   return choice_B_return;
 }
+void x_raise(hsm4c_t *sm, hsm4c_event_t const * /*event*/) {
+  calls.push_back("raise");
+  raise_result = hsm4c_raise(sm, EV_8, nullptr);
+  reenter_result = hsm4c_run(sm, EV_1, nullptr);
+}
 bool x_auto(hsm4c_t const * /*sm*/, hsm4c_event_t const *event) {
   x_auto_event = *event;
   calls.push_back("auto");
@@ -90,6 +97,7 @@ struct Fixture {
     x_auto_return = false;
     action_ctx = nullptr;
     guard_event = action_event = run_event = x_auto_event = hsm4c_event_t{};
+    raise_result = reenter_result = HSM4C_OK;
   }
 
   /** \brief Init the chart and run the given events without recording calls. */
@@ -378,6 +386,36 @@ TEST_CASE_FIXTURE(XFixture, "endless automatic transitions stop at the limit") {
   CHECK((reached == XL1 || reached == XL2));
   CHECK(hsm4c_is_active(&sm, reached));
   CHECK(hsm4c_run(&sm, HSM4C_NO_EVENT, nullptr) == HSM4C_ERR_LIMIT);
+}
+
+TEST_CASE_FIXTURE(XFixture, "internal events are processed in the same call") {
+  xprepare();
+  CHECK(xrun(EV_7) ==
+        Log{"-XPA", "raise", "+XPB", "-XPB", "-XP", "+XR"} + xruns({XR, XROOT}, EV_8));
+  CHECK(raise_result == HSM4C_OK);
+}
+
+TEST_CASE_FIXTURE(XFixture, "hsm4c_run from a callback is refused") {
+  xprepare();
+  xrun(EV_7);
+  CHECK(reenter_result == HSM4C_ERR_BUSY);
+  CHECK(last == XR); // The nested EV_1 had no effect
+}
+
+TEST_CASE_FIXTURE(XFixture, "events raised outside a call come before the next event") {
+  xprepare();
+  CHECK(hsm4c_raise(&sm, EV_1, nullptr) == HSM4C_OK);
+  // EV_1 (XPA -> XPB) first, then EV_2 has no transition in XPB
+  CHECK(xrun(EV_2) == Log{"auto", "guard", "-XPA", "act", "+XPB"} + xruns({XPB, XP, XROOT}, EV_2));
+  CHECK(last == XPB);
+}
+
+TEST_CASE_FIXTURE(XFixture, "raising into a full queue fails") {
+  xprepare();
+  for (int i = 0; i < HSM4C_EVENT_QUEUE_SIZE; ++i) {
+    CHECK(hsm4c_raise(&sm, EV_4, nullptr) == HSM4C_OK);
+  }
+  CHECK(hsm4c_raise(&sm, EV_4, nullptr) == HSM4C_ERR_QUEUE_FULL);
 }
 
 /*

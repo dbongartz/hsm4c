@@ -65,6 +65,20 @@ extern "C" {
 #define HSM4C_MAX_TRANSITIONS 64
 #endif
 
+#ifndef HSM4C_EVENT_QUEUE_SIZE
+/**
+ * \brief Capacity of the internal event queue, see hsm4c_raise(). 1 to 255.
+ *
+ * The queue is part of hsm4c_t, so the value must be the same for the library and all code
+ * including this header.
+ */
+#define HSM4C_EVENT_QUEUE_SIZE 8
+#endif
+
+#if HSM4C_EVENT_QUEUE_SIZE < 1 || HSM4C_EVENT_QUEUE_SIZE > 255
+#error "HSM4C_EVENT_QUEUE_SIZE must be 1 to 255"
+#endif
+
 #ifndef HSM4C_STATE_ID_TYPE
 /** \brief Unsigned integer type of state IDs. Define it before including to change it. */
 #define HSM4C_STATE_ID_TYPE uint16_t
@@ -84,9 +98,13 @@ typedef enum hsm4c_result {
    * \brief More than HSM4C_MAX_TRANSITIONS transitions would have been taken.
    *
    * Processing stopped before the next transition. The machine is in a consistent state and
-   * hsm4c_current() reports the reached state.
+   * hsm4c_current() reports the reached state. Internal events not processed yet stay queued.
    */
   HSM4C_ERR_LIMIT,
+  /** \brief hsm4c_run() was called from a callback of the same machine. Nothing was done. */
+  HSM4C_ERR_BUSY,
+  /** \brief hsm4c_raise(): the internal event queue is full. The event was dropped. */
+  HSM4C_ERR_QUEUE_FULL,
 } hsm4c_result_t;
 
 /** \brief Event: identifier and optional user data. */
@@ -324,14 +342,23 @@ struct hsm4c {
   hsm4c_state_id_t leaf;
   /** \brief Private. User context, see hsm4c_ctx(). */
   void *ctx;
+  /** \brief Private. Internal event queue (ring buffer), see hsm4c_raise(). */
+  hsm4c_event_t queue[HSM4C_EVENT_QUEUE_SIZE];
+  /** \brief Private. Index of the oldest queued event. */
+  uint8_t queue_head;
+  /** \brief Private. Number of queued events. */
+  uint8_t queue_len;
+  /** \brief Private. True while hsm4c_init() or hsm4c_run() is processing. */
+  bool busy;
 };
 
 /**
  * \brief Initializes a machine and starts the chart.
  *
  * Enters the root and its initial states down to a leaf, calling their entry functions,
- * then takes automatic transitions until none is enabled. Run functions are not called.
- * Calling it again restarts the chart and clears all history.
+ * then takes automatic transitions and internal events until none is left. Run functions are
+ * not called. Calling it again restarts the chart and clears all history and queued events.
+ * Must not be called from a callback.
  *
  * \param sm      Machine to initialize.
  * \param chart   Chart to run. Must outlive the machine.
@@ -346,12 +373,18 @@ hsm4c_result_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_i
 /**
  * \brief Processes one event.
  *
- * Takes the enabled transition for the event, if any. Then takes automatic transitions
- * until none is enabled. Whenever no automatic transition is enabled, the run functions of
- * the active branch are called, and can request a further transition.
+ * Processing order (SCXML):
+ * 1. Internal events raised since the last call, see hsm4c_raise().
+ * 2. The enabled transition for the event, if any.
+ * 3. Enabled automatic transitions, else queued internal events, until none is left.
+ * 4. When none is left, the run functions of the active branch. A requested state change
+ *    continues with 3.
  *
- * Guards, actions and run functions receive the event, also for automatic transitions taken
- * afterwards (like SCXML's _event, which keeps the last processed event).
+ * Calling it from a callback of the same machine returns HSM4C_ERR_BUSY and does nothing;
+ * use hsm4c_raise() instead.
+ *
+ * Guards, actions and run functions receive the last processed event, also for automatic
+ * transitions (like SCXML's _event).
  *
  * \param sm      Machine.
  * \param event   Event to process. Must be > 0, or HSM4C_NO_EVENT to only poll.
@@ -360,6 +393,22 @@ hsm4c_result_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_i
  * \return        HSM4C_OK, or an error. The active state is available with hsm4c_current().
  */
 hsm4c_result_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event, void *data);
+
+/**
+ * \brief Raises an internal event.
+ *
+ * Called from a callback, the event is processed in the same hsm4c_run() or hsm4c_init()
+ * call, after the current transition and enabled automatic transitions, and before external
+ * events (SCXML internal event queue). Called outside, it is processed at the start of the next
+ * hsm4c_run().
+ *
+ * \param sm      Machine.
+ * \param event   Event to raise. Must be > 0.
+ * \param data    User data passed with the event to the callbacks. Can be NULL.
+ *
+ * \return        HSM4C_OK, or HSM4C_ERR_QUEUE_FULL if HSM4C_EVENT_QUEUE_SIZE events are queued.
+ */
+hsm4c_result_t hsm4c_raise(hsm4c_t *sm, hsm4c_event_id_t event, void *data);
 
 /**
  * \brief Gets the user context given to hsm4c_init().

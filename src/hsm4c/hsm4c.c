@@ -196,39 +196,77 @@ static hsm4c_state_id_t run_states(hsm4c_t *sm, hsm4c_event_t const *event) {
 }
 
 /**
- * \brief Takes automatic transitions until none is enabled.
+ * \brief Executes a transition, counted against HSM4C_MAX_TRANSITIONS.
  *
- * With run_fns, run functions are called whenever no automatic transition is enabled and can
- * request further transitions.
- *
- * \param taken   Transitions already taken in this call, counted against HSM4C_MAX_TRANSITIONS.
+ * \return HSM4C_ERR_LIMIT without executing it if the limit is reached.
  */
-static hsm4c_result_t settle(hsm4c_t *sm, hsm4c_event_t const *event, bool run_fns,
-                             unsigned taken) {
+static hsm4c_result_t take(hsm4c_t *sm, hsm4c_state_id_t from, hsm4c_state_id_t to,
+                           hsm4c_transition_type_t type, hsm4c_action_fn_t action,
+                           hsm4c_event_t const *event, unsigned *taken) {
+  // Stop endless chains of transitions, e.g. a cycle of always enabled automatic transitions
+  if (*taken >= HSM4C_MAX_TRANSITIONS) {
+    return HSM4C_ERR_LIMIT;
+  }
+  ++*taken;
+  execute_transition(sm, from, to, type, action, event);
+  return HSM4C_OK;
+}
+
+/** \brief Takes the transition for event, if one is enabled. */
+static hsm4c_result_t take_event(hsm4c_t *sm, hsm4c_event_t const *event, unsigned *taken) {
+  hsm4c_state_id_t source = HSM4C_ROOT;
+  hsm4c_transition_t const *const t = find_transition(sm, event->id, event, &source);
+  if (!t) {
+    return HSM4C_OK;
+  }
+  return take(sm, source, t->to, t->type, t->action_fn, event, taken);
+}
+
+/**
+ * \brief Takes automatic transitions and internal events until none is left.
+ *
+ * Order per step (SCXML): an enabled automatic transition, else the oldest internal event.
+ * With run_fns, run functions are called when neither is left and can request further
+ * transitions.
+ *
+ * \param event   Last processed event, passed to the callbacks. Updated by internal events.
+ * \param taken   Transitions taken in this call, counted against HSM4C_MAX_TRANSITIONS.
+ */
+static hsm4c_result_t settle(hsm4c_t *sm, hsm4c_event_t *event, bool run_fns, unsigned *taken) {
   for (;;) {
     hsm4c_state_id_t source = HSM4C_ROOT;
     hsm4c_transition_t const *const t = find_transition(sm, HSM4C_NO_EVENT, event, &source);
-    hsm4c_state_id_t run_target = HSM4C_NO_STATE;
-    if (!t) {
-      if (!run_fns) {
-        return HSM4C_OK;
-      }
-      run_target = run_states(sm, event);
-      if (run_target == HSM4C_NO_STATE) {
-        return HSM4C_OK;
-      }
-    }
-
-    // Stop endless chains of transitions, e.g. a cycle of always enabled automatic transitions
-    if (taken >= HSM4C_MAX_TRANSITIONS) {
-      return HSM4C_ERR_LIMIT;
-    }
-    ++taken;
-
     if (t) {
-      execute_transition(sm, source, t->to, t->type, t->action_fn, event);
-    } else {
-      execute_transition(sm, sm->leaf, run_target, HSM4C_TRANSITION_EXTERNAL, NULL, event);
+      hsm4c_result_t const r = take(sm, source, t->to, t->type, t->action_fn, event, taken);
+      if (r != HSM4C_OK) {
+        return r;
+      }
+      continue;
+    }
+
+    if (sm->queue_len > 0) {
+      hsm4c_event_t const next = sm->queue[sm->queue_head];
+      hsm4c_result_t const r = take_event(sm, &next, taken);
+      if (r != HSM4C_OK) {
+        return r; // The event stays queued
+      }
+      sm->queue_head = (uint8_t)((sm->queue_head + 1U) % HSM4C_EVENT_QUEUE_SIZE);
+      --sm->queue_len;
+      *event = next;
+      continue;
+    }
+
+    if (!run_fns) {
+      return HSM4C_OK;
+    }
+    hsm4c_state_id_t const run_target = run_states(sm, event);
+    if (run_target == HSM4C_NO_STATE) {
+      return HSM4C_OK;
+    }
+    hsm4c_result_t const r =
+        take(sm, sm->leaf, run_target, HSM4C_TRANSITION_EXTERNAL, NULL, event, taken);
+    if (r != HSM4C_OK) {
+      return r;
     }
   }
 }
@@ -240,31 +278,63 @@ hsm4c_result_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_i
   sm->chart = chart;
   sm->active = active;
   sm->ctx = ctx;
+  sm->queue_head = 0;
+  sm->queue_len = 0;
+  sm->busy = true;
   for (hsm4c_state_id_t i = 0; i < chart->num_states; ++i) {
     active[i] = HSM4C_NO_STATE;
   }
 
   enter(sm, HSM4C_ROOT);
   sm->leaf = enter_initial(sm, HSM4C_ROOT);
-  hsm4c_event_t const no_event = {HSM4C_NO_EVENT, NULL};
-  return settle(sm, &no_event, false, 0);
+
+  hsm4c_event_t current = {HSM4C_NO_EVENT, NULL};
+  unsigned taken = 0;
+  hsm4c_result_t const r = settle(sm, &current, false, &taken);
+  sm->busy = false;
+  return r;
 }
 
 hsm4c_result_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event, void *data) {
-  hsm4c_event_t const ev = {event, data};
-  unsigned taken = 0;
+  if (sm->busy) {
+    return HSM4C_ERR_BUSY;
+  }
+  sm->busy = true;
 
-  // Event transitions first, automatic transitions afterwards (SCXML macrostep)
-  if (event != HSM4C_NO_EVENT) {
-    hsm4c_state_id_t source = HSM4C_ROOT;
-    hsm4c_transition_t const *const t = find_transition(sm, event, &ev, &source);
-    if (t) {
-      execute_transition(sm, source, t->to, t->type, t->action_fn, &ev);
-      ++taken;
-    }
+  hsm4c_event_t current = {HSM4C_NO_EVENT, NULL};
+  unsigned taken = 0;
+  hsm4c_result_t r = HSM4C_OK;
+
+  // Internal events raised outside of a call come before the new event (SCXML)
+  if (sm->queue_len > 0) {
+    r = settle(sm, &current, false, &taken);
   }
 
-  return settle(sm, &ev, true, taken);
+  // The event's transition first, then automatic transitions and internal events
+  if (r == HSM4C_OK) {
+    current.id = event;
+    current.data = data;
+    if (event != HSM4C_NO_EVENT) {
+      r = take_event(sm, &current, &taken);
+    }
+  }
+  if (r == HSM4C_OK) {
+    r = settle(sm, &current, true, &taken);
+  }
+
+  sm->busy = false;
+  return r;
+}
+
+hsm4c_result_t hsm4c_raise(hsm4c_t *sm, hsm4c_event_id_t event, void *data) {
+  if (sm->queue_len >= HSM4C_EVENT_QUEUE_SIZE) {
+    return HSM4C_ERR_QUEUE_FULL;
+  }
+  unsigned const tail = (sm->queue_head + sm->queue_len) % HSM4C_EVENT_QUEUE_SIZE;
+  sm->queue[tail].id = event;
+  sm->queue[tail].data = data;
+  ++sm->queue_len;
+  return HSM4C_OK;
 }
 
 void *hsm4c_ctx(hsm4c_t const *sm) { return sm->ctx; }

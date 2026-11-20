@@ -51,8 +51,9 @@ extern hsm4c_chart_t const chart;
  *
  * XROOT (initial XP; XQ on EV_5)
  * +- XP (initial XPA; XQ on EV_1)
- * |  +- XPA (XR automatic [x_auto], XPB on EV_1, XQ on EV_2, targetless on EV_3, XL1 on EV_6)
- * |  +- XPB
+ * |  +- XPA (XR automatic [x_auto], XPB on EV_1, XQ on EV_2, targetless on EV_3, XL1 on EV_6,
+ * |         XPB on EV_7 / x_raise)
+ * |  +- XPB (XR on EV_8)
  * +- XQ
  * +- XR
  * +- XL1 (XL2 automatic)
@@ -71,6 +72,7 @@ void t_action(hsm4c_t *sm, hsm4c_event_t const *event);
 bool t_choice_A(hsm4c_t const *sm, hsm4c_event_t const *event);
 bool t_choice_B(hsm4c_t const *sm, hsm4c_event_t const *event);
 bool x_auto(hsm4c_t const *sm, hsm4c_event_t const *event);
+void x_raise(hsm4c_t *sm, hsm4c_event_t const *event);
 
 #ifdef __cplusplus
 }
