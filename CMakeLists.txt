@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
   hsm4c
-  VERSION 0.1.0
+  VERSION 0.2.0
   DESCRIPTION "Hierarchical state machine (statechart) library in C"
   HOMEPAGE_URL "https://github.com/dbongartz/hsm4c"
   LANGUAGES C)

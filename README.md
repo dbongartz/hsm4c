@@ -29,7 +29,7 @@ include(FetchContent)
 FetchContent_Declare(
   hsm4c
   GIT_REPOSITORY https://github.com/dbongartz/hsm4c.git
-  GIT_TAG v0.1.0)
+  GIT_TAG v0.2.0)
 FetchContent_MakeAvailable(hsm4c)
 
 target_link_libraries(my_app PRIVATE hsm4c::hsm4c)
@@ -38,7 +38,7 @@ target_link_libraries(my_app PRIVATE hsm4c::hsm4c)
 Or with an installed package:
 
 ```cmake
-find_package(hsm4c 0.1 REQUIRED)
+find_package(hsm4c 0.2 REQUIRED)
 target_link_libraries(my_app PRIVATE hsm4c::hsm4c)
 ```
 
