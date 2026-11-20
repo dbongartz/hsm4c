@@ -105,6 +105,14 @@ typedef enum hsm4c_result {
   HSM4C_ERR_BUSY,
   /** \brief hsm4c_raise(): the internal event queue is full. The event was dropped. */
   HSM4C_ERR_QUEUE_FULL,
+  /** \brief The chart is invalid, see hsm4c_validate(). */
+  HSM4C_ERR_INVALID_CHART,
+  /**
+   * \brief A run function returned a state ID that is not in the chart.
+   *
+   * Processing stopped. The machine is in a consistent state.
+   */
+  HSM4C_ERR_INVALID_STATE,
 } hsm4c_result_t;
 
 /** \brief Event: identifier and optional user data. */
@@ -353,12 +361,35 @@ struct hsm4c {
 };
 
 /**
+ * \brief Checks a chart.
+ *
+ * hsm4c_init() calls it, so a valid chart can't make the machine misbehave. Rules:
+ * - Every state's parent exists, and parent chains reach the root without cycles. The root is
+ *   a normal state.
+ * - History and choice states have no children and no entry, exit or run functions.
+ * - A state's initial state is a direct child and not a history state.
+ * - History states have no transitions. Their initial state, if set, is a normal state below
+ *   their parent; otherwise their parent has an initial state.
+ * - Choice states have at least one transition, all automatic (HSM4C_NO_EVENT).
+ * - Transitions target existing states, have events >= 0 and a valid type.
+ *
+ * \param chart   Chart to check.
+ * \param state   Set to the first invalid state on error. Can be NULL.
+ *
+ * \return        HSM4C_OK or HSM4C_ERR_INVALID_CHART.
+ */
+hsm4c_result_t hsm4c_validate(hsm4c_chart_t const *chart, hsm4c_state_id_t *state);
+
+/**
  * \brief Initializes a machine and starts the chart.
  *
  * Enters the root and its initial states down to a leaf, calling their entry functions,
  * then takes automatic transitions and internal events until none is left. Run functions are
  * not called. Calling it again restarts the chart and clears all history and queued events.
  * Must not be called from a callback.
+ *
+ * The chart is checked with hsm4c_validate() first. If it is invalid, HSM4C_ERR_INVALID_CHART
+ * is returned and the machine must not be used.
  *
  * \param sm      Machine to initialize.
  * \param chart   Chart to run. Must outlive the machine.

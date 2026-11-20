@@ -418,14 +418,181 @@ TEST_CASE_FIXTURE(XFixture, "raising into a full queue fails") {
   CHECK(hsm4c_raise(&sm, EV_4, nullptr) == HSM4C_ERR_QUEUE_FULL);
 }
 
+/* -------- VALIDATION -------- */
+
+namespace {
+
+using States = std::vector<hsm4c_state_t>;
+
+constexpr hsm4c_transition_t table_end{0, 0, nullptr, nullptr, HSM4C_TRANSITION_TABLE_END};
+
+hsm4c_state_t state(hsm4c_state_id_t parent, hsm4c_state_id_t initial = HSM4C_NO_STATE,
+                    hsm4c_state_type_t type = HSM4C_STATE_NORMAL) {
+  hsm4c_state_t s{};
+  s.parent = parent;
+  s.initial = initial;
+  s.type = type;
+  return s;
+}
+
+/** \brief ROOT (initial A), A, B */
+States valid_states() { return {state(ROOT, 1), state(ROOT), state(ROOT)}; }
+
+/** \brief Validates states and returns the reported invalid state, or -1 if valid. */
+int invalid_state(States const &states) {
+  hsm4c_chart_t const c{states.data(), static_cast<hsm4c_state_id_t>(states.size())};
+  hsm4c_state_id_t bad = 0;
+  return hsm4c_validate(&c, &bad) == HSM4C_OK ? -1 : bad;
+}
+
+} // namespace
+
+TEST_CASE("test charts are valid") {
+  CHECK(hsm4c_validate(&chart, nullptr) == HSM4C_OK);
+  CHECK(hsm4c_validate(&xchart, nullptr) == HSM4C_OK);
+  CHECK(invalid_state(valid_states()) == -1);
+}
+
+TEST_CASE("empty charts are invalid") {
+  hsm4c_chart_t const empty{nullptr, 0};
+  CHECK(hsm4c_validate(&empty, nullptr) == HSM4C_ERR_INVALID_CHART);
+  CHECK(hsm4c_validate(nullptr, nullptr) == HSM4C_ERR_INVALID_CHART);
+}
+
+TEST_CASE("parents must exist and reach the root") {
+  States s = valid_states();
+  s[2].parent = 7;
+  CHECK(invalid_state(s) == 2);
+
+  s = valid_states();
+  s[1].parent = 2;
+  s[2].parent = 1;
+  CHECK(invalid_state(s) == 1);
+}
+
+TEST_CASE("pseudo states have no children") {
+  States s = valid_states();
+  s[2] = state(ROOT, HSM4C_NO_STATE, HSM4C_STATE_HISTORY);
+  s.push_back(state(2));
+  CHECK(invalid_state(s) == 3);
+}
+
+TEST_CASE("initial states are direct children and not histories") {
+  States s = valid_states();
+  s.push_back(state(1)); // 3, below A
+  s[0].initial = 3;
+  CHECK(invalid_state(s) == 0);
+
+  s = valid_states();
+  s[2] = state(ROOT, 1, HSM4C_STATE_HISTORY);
+  s[0].initial = 2;
+  CHECK(invalid_state(s) == 0);
+}
+
+TEST_CASE("the root is a normal state") {
+  States s = valid_states();
+  s[0].type = HSM4C_STATE_HISTORY;
+  CHECK(invalid_state(s) == 0);
+}
+
+TEST_CASE("state types must be valid") {
+  States s = valid_states();
+  // Invalid on purpose
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
+  s[1].type = static_cast<hsm4c_state_type_t>(42);
+  CHECK(invalid_state(s) == 1);
+}
+
+TEST_CASE("histories need a fallback below their parent") {
+  States s = valid_states();
+  s.push_back(state(1, HSM4C_NO_STATE, HSM4C_STATE_HISTORY_DEEP)); // 3: history of A
+  CHECK(invalid_state(s) == 3);                                    // A has no initial
+
+  s[3].initial = 2; // B is not below A
+  CHECK(invalid_state(s) == 3);
+
+  s.push_back(state(1)); // 4, below A
+  s[3].initial = 4;
+  CHECK(invalid_state(s) == -1);
+
+  s[3].initial = HSM4C_NO_STATE;
+  s[1].initial = 4; // Falls back to A's initial
+  CHECK(invalid_state(s) == -1);
+}
+
+TEST_CASE("pseudo states have no callbacks, histories no transitions") {
+  States s = valid_states();
+  s[2] = state(ROOT, 1, HSM4C_STATE_HISTORY);
+  CHECK(invalid_state(s) == -1);
+
+  s[2].entry_fn = s_entry;
+  CHECK(invalid_state(s) == 2);
+
+  static hsm4c_transition_t const t[] = {{EV_1, 1, nullptr, nullptr, HSM4C_TRANSITION_EXTERNAL},
+                                         table_end};
+  s[2].entry_fn = nullptr;
+  s[2].transitions = t;
+  CHECK(invalid_state(s) == 2);
+}
+
+TEST_CASE("choices need automatic transitions") {
+  static hsm4c_transition_t const automatic[] = {
+      {HSM4C_NO_EVENT, 1, nullptr, nullptr, HSM4C_TRANSITION_EXTERNAL}, table_end};
+  static hsm4c_transition_t const event[] = {{EV_1, 1, nullptr, nullptr, HSM4C_TRANSITION_EXTERNAL},
+                                             table_end};
+  static hsm4c_transition_t const empty[] = {table_end};
+
+  States s = valid_states();
+  s[2] = state(ROOT, HSM4C_NO_STATE, HSM4C_STATE_CHOICE);
+  CHECK(invalid_state(s) == 2);
+  s[2].transitions = empty;
+  CHECK(invalid_state(s) == 2);
+  s[2].transitions = event;
+  CHECK(invalid_state(s) == 2);
+  s[2].transitions = automatic;
+  CHECK(invalid_state(s) == -1);
+}
+
+TEST_CASE("transitions must be valid") {
+  static hsm4c_transition_t const bad_target[] = {
+      {EV_1, 99, nullptr, nullptr, HSM4C_TRANSITION_EXTERNAL}, table_end};
+  static hsm4c_transition_t const bad_event[] = {
+      {-1, 1, nullptr, nullptr, HSM4C_TRANSITION_EXTERNAL}, table_end};
+  // Invalid on purpose
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
+  auto const invalid_type = static_cast<hsm4c_transition_type_t>(42);
+  static hsm4c_transition_t const bad_type[] = {{EV_1, 1, nullptr, nullptr, invalid_type},
+                                                table_end};
+
+  for (auto const *table : {bad_target, bad_event, bad_type}) {
+    States s = valid_states();
+    s[2].transitions = table;
+    CHECK(invalid_state(s) == 2);
+  }
+}
+
+TEST_CASE("init rejects invalid charts") {
+  States s = valid_states();
+  s[2].parent = 7;
+  hsm4c_chart_t const c{s.data(), static_cast<hsm4c_state_id_t>(s.size())};
+  hsm4c_t sm{};
+  hsm4c_state_id_t active[3]{};
+  CHECK(hsm4c_init(&sm, &c, active, nullptr) == HSM4C_ERR_INVALID_CHART);
+}
+
+TEST_CASE_FIXTURE(Fixture, "run functions returning unknown states are an error") {
+  prepare();
+  run_return[A] = 200;
+  CHECK(hsm4c_run(&sm, HSM4C_NO_EVENT, nullptr) == HSM4C_ERR_INVALID_STATE);
+  CHECK(hsm4c_current(&sm) == AAA);
+}
+
 /*
  * TODO:
  *
  * - Empty state and transition functions
  * - Parent state with no initial (Should work as target and with child as target)
  * - Auto transitions on history states (Should not execute!)
- * - initial != self (can be caught)
- * - initial != other parent (can be caught)
  * - hsm4c_state_t change via run functions on lowest and high level
  * - hsm4c_state_t change via run on no transition found
  * - hsm4c_state_t change via run automatic

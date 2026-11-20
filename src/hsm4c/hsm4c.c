@@ -263,6 +263,9 @@ static hsm4c_result_t settle(hsm4c_t *sm, hsm4c_event_t *event, bool run_fns, un
     if (run_target == HSM4C_NO_STATE) {
       return HSM4C_OK;
     }
+    if (run_target >= sm->chart->num_states) {
+      return HSM4C_ERR_INVALID_STATE;
+    }
     hsm4c_result_t const r =
         take(sm, sm->leaf, run_target, HSM4C_TRANSITION_EXTERNAL, NULL, event, taken);
     if (r != HSM4C_OK) {
@@ -271,10 +274,130 @@ static hsm4c_result_t settle(hsm4c_t *sm, hsm4c_event_t *event, bool run_fns, un
   }
 }
 
+/** \brief Returns true for history and choice pseudo states. */
+static bool is_pseudo(hsm4c_state_t const *state) { return state->type != HSM4C_STATE_NORMAL; }
+
+/** \brief Checks the parent chain of a state: valid IDs, no cycles, no pseudo state parents. */
+static bool parents_valid(hsm4c_chart_t const *chart, hsm4c_state_id_t id) {
+  hsm4c_state_id_t s = id;
+  // A valid chain reaches the root in fewer than num_states steps
+  for (hsm4c_state_id_t steps = 0; steps < chart->num_states; ++steps) {
+    if (s == HSM4C_ROOT) {
+      return true;
+    }
+    hsm4c_state_id_t const parent = chart->states[s].parent;
+    // The root's own type is checked by state_valid()
+    if (parent >= chart->num_states ||
+        (parent != HSM4C_ROOT && is_pseudo(&chart->states[parent]))) {
+      return false;
+    }
+    s = parent;
+  }
+  return false;
+}
+
+/** \brief Returns true if s is a proper descendant of ancestor. Parents must be valid. */
+static bool chart_is_descendant(hsm4c_chart_t const *chart, hsm4c_state_id_t s,
+                                hsm4c_state_id_t ancestor) {
+  while (s != HSM4C_ROOT) {
+    s = chart->states[s].parent;
+    if (s == ancestor) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** \brief Checks the transition table of a state. */
+static bool transitions_valid(hsm4c_chart_t const *chart, hsm4c_state_t const *state) {
+  hsm4c_transition_t const *t = state->transitions;
+  for (; t && t->type != HSM4C_TRANSITION_TABLE_END; ++t) {
+    if (t->to >= chart->num_states || t->event < 0 ||
+        (t->type != HSM4C_TRANSITION_EXTERNAL && t->type != HSM4C_TRANSITION_LOCAL)) {
+      return false;
+    }
+    if (state->type == HSM4C_STATE_CHOICE && t->event != HSM4C_NO_EVENT) {
+      return false;
+    }
+  }
+  // Choice states need at least one transition
+  return state->type != HSM4C_STATE_CHOICE || (state->transitions && t != state->transitions);
+}
+
+/** \brief Checks one state. Parents of all states must already be valid. */
+static bool state_valid(hsm4c_chart_t const *chart, hsm4c_state_id_t id) {
+  hsm4c_state_t const *const state = &chart->states[id];
+
+  if (state->type != HSM4C_STATE_NORMAL && state->type != HSM4C_STATE_HISTORY &&
+      state->type != HSM4C_STATE_HISTORY_DEEP && state->type != HSM4C_STATE_CHOICE) {
+    return false;
+  }
+  if (id == HSM4C_ROOT && is_pseudo(state)) {
+    return false;
+  }
+  if (is_pseudo(state) && (state->entry_fn || state->exit_fn || state->run_fn)) {
+    return false;
+  }
+  if (state->initial >= chart->num_states) {
+    return false;
+  }
+
+  if (state->type == HSM4C_STATE_HISTORY || state->type == HSM4C_STATE_HISTORY_DEEP) {
+    // Histories have no transitions and need a fallback: own initial, else the parent's
+    if (state->transitions && state->transitions->type != HSM4C_TRANSITION_TABLE_END) {
+      return false;
+    }
+    if (state->initial == HSM4C_NO_STATE) {
+      return chart->states[state->parent].initial != HSM4C_NO_STATE;
+    }
+    return chart_is_descendant(chart, state->initial, state->parent) &&
+           !is_pseudo(&chart->states[state->initial]);
+  }
+
+  // Initial state: a direct child, not a history
+  if (state->initial != HSM4C_NO_STATE) {
+    hsm4c_state_t const *const initial = &chart->states[state->initial];
+    if (initial->parent != id || initial->type == HSM4C_STATE_HISTORY ||
+        initial->type == HSM4C_STATE_HISTORY_DEEP) {
+      return false;
+    }
+  }
+
+  return transitions_valid(chart, state);
+}
+
 /* -------- Public -------- */
+
+hsm4c_result_t hsm4c_validate(hsm4c_chart_t const *chart, hsm4c_state_id_t *state) {
+  if (!chart || !chart->states || chart->num_states == 0) {
+    if (state) {
+      *state = HSM4C_ROOT;
+    }
+    return HSM4C_ERR_INVALID_CHART;
+  }
+
+  // Parents first: the other checks walk the parent chains
+  for (hsm4c_state_id_t pass = 0; pass < 2; ++pass) {
+    for (hsm4c_state_id_t id = 0; id < chart->num_states; ++id) {
+      bool const valid = pass == 0 ? parents_valid(chart, id) : state_valid(chart, id);
+      if (!valid) {
+        if (state) {
+          *state = id;
+        }
+        return HSM4C_ERR_INVALID_CHART;
+      }
+    }
+  }
+  return HSM4C_OK;
+}
 
 hsm4c_result_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_id_t *active,
                           void *ctx) {
+  hsm4c_result_t const valid = hsm4c_validate(chart, NULL);
+  if (valid != HSM4C_OK) {
+    return valid;
+  }
+
   sm->chart = chart;
   sm->active = active;
   sm->ctx = ctx;
