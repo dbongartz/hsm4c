@@ -25,37 +25,38 @@ using Log = std::vector<std::string>;
 
 static Log calls;
 static bool guard_return = true;
-static std::map<hsm4c_state_t const *, hsm4c_state_t *> run_return;
+static std::map<hsm4c_state_id_t, hsm4c_state_id_t> run_return;
 static bool choice_A_return = false;
 static int choice_A_called = 0;
 static bool choice_B_return = false;
 static int choice_B_called = 0;
 static bool x_auto_return = false;
 
-static std::string name(hsm4c_state_t const *s) { return s->config->name; }
+static std::string name(hsm4c_chart_t const &c, int s) { return c.states[s].name; }
+static std::string name(hsm4c_t const *sm, hsm4c_state_id_t s) { return name(*sm->chart, s); }
 
 extern "C" {
-void s_entry(hsm4c_state_t const *s) { calls.push_back("+" + name(s)); }
-void s_exit(hsm4c_state_t const *s) { calls.push_back("-" + name(s)); }
-hsm4c_state_t *s_run(hsm4c_state_t const *s, hsm4c_event_id_t event) {
-  calls.push_back(name(s) + ".run(" + std::to_string(event) + ")");
-  auto it = run_return.find(s);
-  return it == run_return.end() ? nullptr : it->second;
+void s_entry(hsm4c_t *sm, hsm4c_state_id_t state) { calls.push_back("+" + name(sm, state)); }
+void s_exit(hsm4c_t *sm, hsm4c_state_id_t state) { calls.push_back("-" + name(sm, state)); }
+hsm4c_state_id_t s_run(hsm4c_t *sm, hsm4c_state_id_t state, hsm4c_event_id_t event) {
+  calls.push_back(name(sm, state) + ".run(" + std::to_string(event) + ")");
+  auto it = run_return.find(state);
+  return it == run_return.end() ? HSM4C_NO_STATE : it->second;
 }
-bool t_guard(hsm4c_state_t const * /*root*/) {
+bool t_guard(hsm4c_t const * /*sm*/) {
   calls.push_back("guard");
   return guard_return;
 }
-void t_action(hsm4c_state_t const * /*root*/) { calls.push_back("act"); }
-bool t_choice_A(hsm4c_state_t const * /*root*/) {
+void t_action(hsm4c_t * /*sm*/) { calls.push_back("act"); }
+bool t_choice_A(hsm4c_t const * /*sm*/) {
   choice_A_called++;
   return choice_A_return;
 }
-bool t_choice_B(hsm4c_state_t const * /*root*/) {
+bool t_choice_B(hsm4c_t const * /*sm*/) {
   choice_B_called++;
   return choice_B_return;
 }
-bool x_auto(hsm4c_state_t const * /*root*/) {
+bool x_auto(hsm4c_t const * /*sm*/) {
   calls.push_back("auto");
   return x_auto_return;
 }
@@ -64,10 +65,10 @@ bool x_auto(hsm4c_state_t const * /*root*/) {
 /* -------- FIXTURE -------- */
 
 struct Fixture {
-  hsm4c_state_t *const root = &states[ROOT];
+  hsm4c_t sm{};
+  hsm4c_state_id_t active[NUM_STATES]{};
 
   Fixture() {
-    chart_reset();
     calls.clear();
     guard_return = true;
     run_return.clear();
@@ -78,9 +79,9 @@ struct Fixture {
 
   /** \brief Init the chart and run the given events without recording calls. */
   void prepare(std::vector<hsm4c_event_id_t> const &events = {}) {
-    hsm4c_init(root);
+    hsm4c_init(&sm, &chart, active);
     for (hsm4c_event_id_t e : events) {
-      hsm4c_run(root, e);
+      hsm4c_run(&sm, e);
     }
     calls.clear();
   }
@@ -88,26 +89,26 @@ struct Fixture {
   /** \brief Run one event and return the recorded calls. */
   Log run(hsm4c_event_id_t e) {
     calls.clear();
-    last = hsm4c_run(root, e);
+    last = hsm4c_run(&sm, e);
     return calls;
   }
 
-  hsm4c_state_t const *last = nullptr;
+  hsm4c_state_id_t last = HSM4C_NO_STATE;
 };
 
 /** \brief Expected run calls for a branch, leaf first. */
 static Log runs(std::vector<int> const &branch, hsm4c_event_id_t e,
-                hsm4c_state_t const *chart = states) {
+                hsm4c_chart_t const &c = chart) {
   Log l;
   for (int s : branch) {
-    l.push_back(name(&chart[s]) + ".run(" + std::to_string(e) + ")");
+    l.push_back(name(c, s) + ".run(" + std::to_string(e) + ")");
   }
   return l;
 }
 
 /** \brief Same as runs() for the SCXML semantics chart. */
 static Log xruns(std::vector<int> const &branch, hsm4c_event_id_t e) {
-  return runs(branch, e, xstates);
+  return runs(branch, e, xchart);
 }
 
 static Log operator+(Log a, Log const &b) {
@@ -118,12 +119,12 @@ static Log operator+(Log a, Log const &b) {
 /* -------- TESTS -------- */
 
 TEST_CASE_FIXTURE(Fixture, "initial") {
-  hsm4c_init(root);
+  hsm4c_init(&sm, &chart, active);
   CHECK(calls == Log{"+ROOT", "+A", "+AA", "+AAA"});
 
   // Double init to check if it resets accordingly
   calls.clear();
-  hsm4c_init(root);
+  hsm4c_init(&sm, &chart, active);
   CHECK(calls == Log{"+ROOT", "+A", "+AA", "+AAA"});
 }
 
@@ -238,43 +239,43 @@ TEST_CASE_FIXTURE(Fixture, "A to A internal on composite state") {
   prepare();
   // Must not exit/enter any substate.
   CHECK(run(EV_13) == Log{"guard", "act"} + runs({AAA, AA, A, ROOT}, EV_13));
-  CHECK(last == &states[AAA]);
+  CHECK(last == AAA);
 }
 
 TEST_CASE_FIXTURE(Fixture, "run returning own composite state is no change") {
   prepare();
-  run_return[&states[A]] = &states[A];
+  run_return[A] = A;
   CHECK(run(EV_NO_EVENT) == runs({AAA, AA, A, ROOT}, EV_NO_EVENT));
-  CHECK(last == &states[AAA]);
+  CHECK(last == AAA);
 }
 
 TEST_CASE_FIXTURE(Fixture, "false guard takes no transition") {
   prepare();
   guard_return = false;
   CHECK(run(EV_1) == Log{"guard"} + runs({AAA, AA, A, ROOT}, EV_1));
-  CHECK(last == &states[AAA]);
+  CHECK(last == AAA);
 }
 
 /* -------- SCXML SEMANTICS -------- */
 
 struct XFixture : Fixture {
-  hsm4c_state_t *const xroot = &xstates[XROOT];
+  hsm4c_state_id_t xactive[NUM_XSTATES]{};
 
   void xprepare() {
-    hsm4c_init(xroot);
+    hsm4c_init(&sm, &xchart, xactive);
     calls.clear();
   }
 
   Log xrun(hsm4c_event_id_t e) {
     calls.clear();
-    last = hsm4c_run(xroot, e);
+    last = hsm4c_run(&sm, e);
     return calls;
   }
 };
 
 TEST_CASE_FIXTURE(XFixture, "init takes automatic transitions") {
   x_auto_return = true;
-  CHECK(hsm4c_init(xroot) == &xstates[XR]);
+  CHECK(hsm4c_init(&sm, &xchart, xactive) == XR);
   // No run functions on init
   CHECK(calls == Log{"+XROOT", "+XP", "+XPA", "auto", "-XPA", "-XP", "+XR"});
 }
@@ -292,16 +293,16 @@ TEST_CASE_FIXTURE(XFixture, "automatic transitions are checked after an event wi
   CHECK(xrun(EV_4) == Log{"auto", "-XPA", "-XP", "+XR"} + xruns({XR, XROOT}, EV_4));
 }
 
-TEST_CASE_FIXTURE(XFixture, "deeper source takes priority in root table") {
+TEST_CASE_FIXTURE(XFixture, "deeper source takes priority") {
   xprepare();
-  // Root table lists XP -> XQ first, but XPA -> XPB has the deeper source.
+  // XP has XP -> XQ on EV_1, but XPA -> XPB has the deeper source.
   CHECK(xrun(EV_1) == Log{"guard", "-XPA", "act", "+XPB"} + xruns({XPB, XP, XROOT}, EV_1));
 }
 
 TEST_CASE_FIXTURE(XFixture, "targetless transition only executes its action") {
   xprepare();
   CHECK(xrun(EV_3) == Log{"guard", "act", "auto"} + xruns({XPA, XP, XROOT}, EV_3));
-  CHECK(last == &xstates[XPA]);
+  CHECK(last == XPA);
 }
 
 TEST_CASE_FIXTURE(XFixture, "transition with root as source does not exit the root") {

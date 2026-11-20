@@ -44,34 +44,31 @@ enum events {
   EV_13
 };
 
-extern hsm4c_state_t states[NUM_STATES];
+extern hsm4c_chart_t const chart;
 
 /*
  * Second chart for SCXML semantics:
  *
- * XROOT (initial XP, table: XP -> XQ on EV_1, XPA -> XPB on EV_1, XROOT -> XQ on EV_5)
- * +- XP (initial XPA)
- * |  +- XPA (table: XPA -> XR automatic [x_auto], XPA -> XQ on EV_2, XPA -> (none) on EV_3)
+ * XROOT (initial XP; XQ on EV_5)
+ * +- XP (initial XPA; XQ on EV_1)
+ * |  +- XPA (XR automatic [x_auto], XPB on EV_1, XQ on EV_2, targetless on EV_3)
  * |  +- XPB
  * +- XQ
  * +- XR
  */
 enum xstates { XROOT, XP, XPA, XPB, XQ, XR, NUM_XSTATES };
 
-extern hsm4c_state_t xstates[NUM_XSTATES];
+extern hsm4c_chart_t const xchart;
 
-/** \brief Map configs and reset all states. */
-void chart_reset(void);
-
-/* hsm4c_state_t and transition functions. Implemented by the test (fakes). */
-void s_entry(hsm4c_state_t const *s);
-void s_exit(hsm4c_state_t const *s);
-hsm4c_state_t *s_run(hsm4c_state_t const *s, hsm4c_event_id_t event);
-bool t_guard(hsm4c_state_t const *root);
-void t_action(hsm4c_state_t const *root);
-bool t_choice_A(hsm4c_state_t const *root);
-bool t_choice_B(hsm4c_state_t const *root);
-bool x_auto(hsm4c_state_t const *root);
+/* State and transition functions. Implemented by the test (fakes). */
+void s_entry(hsm4c_t *sm, hsm4c_state_id_t state);
+void s_exit(hsm4c_t *sm, hsm4c_state_id_t state);
+hsm4c_state_id_t s_run(hsm4c_t *sm, hsm4c_state_id_t state, hsm4c_event_id_t event);
+bool t_guard(hsm4c_t const *sm);
+void t_action(hsm4c_t *sm);
+bool t_choice_A(hsm4c_t const *sm);
+bool t_choice_B(hsm4c_t const *sm);
+bool x_auto(hsm4c_t const *sm);
 
 #ifdef __cplusplus
 }
