@@ -7,7 +7,7 @@ FetchContent_Declare(
   GIT_TAG 2d0a9359a60c51affe2a9bebb1be1dca47868151 # v2.5.3
   GIT_SHALLOW TRUE
   SYSTEM
-  FIND_PACKAGE_ARGS 2.4.12)
+  FIND_PACKAGE_ARGS 2.5.3)
 set(DOCTEST_NO_INSTALL ON)
 FetchContent_MakeAvailable(doctest)
 
