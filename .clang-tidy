@@ -22,5 +22,5 @@ Checks: >
   -clang-analyzer-optin.performance.Padding,
   -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
 WarningsAsErrors: "*"
-HeaderFilterRegex: "/(src|test|examples)/"
+HeaderFilterRegex: "/(src|test|examples|fuzz)/"
 FormatStyle: file

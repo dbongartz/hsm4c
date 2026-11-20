@@ -25,7 +25,9 @@ FetchContent_Declare(
 set(DOCTEST_NO_INSTALL ON)
 FetchContent_MakeAvailable(doctest)
 
-add_executable(hsm4c_tests test_hsm4c.cpp test_chart.c test_scxml.cpp scxml_charts.c)
+add_executable(hsm4c_tests test_hsm4c.cpp test_chart.c test_scxml.cpp scxml_charts.c
+                           test_fuzz.cpp ${PROJECT_SOURCE_DIR}/fuzz/fuzz_chart.c)
+target_include_directories(hsm4c_tests PRIVATE ${PROJECT_SOURCE_DIR}/fuzz)
 target_link_libraries(hsm4c_tests PRIVATE hsm4c::hsm4c doctest::doctest)
 target_compile_features(hsm4c_tests PRIVATE cxx_std_17)
 set_target_properties(hsm4c_tests PROPERTIES C_EXTENSIONS OFF CXX_EXTENSIONS OFF)

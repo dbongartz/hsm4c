@@ -74,7 +74,7 @@ Linting, as in CI (clang 18):
 
 ```sh
 git ls-files '*.c' '*.h' '*.cpp' | xargs clang-format-18 --dry-run --Werror
-cmake --preset lint && run-clang-tidy-18 -quiet -p build/lint "$PWD/(src|test|examples)/"
+cmake --preset lint && run-clang-tidy-18 -quiet -p build/lint "$PWD/(src|test|examples|fuzz)/"
 ```
 
 The `lint` preset writes `build/lint/compile_commands.json`, which can also be used by clangd.

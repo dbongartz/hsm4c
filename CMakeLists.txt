@@ -10,6 +10,7 @@ project(
 option(HSM4C_BUILD_TESTS "Build the hsm4c tests" ${PROJECT_IS_TOP_LEVEL})
 option(HSM4C_BUILD_EXAMPLES "Build the hsm4c examples" ${PROJECT_IS_TOP_LEVEL})
 option(HSM4C_BUILD_DOCS "Build the hsm4c API documentation (requires Doxygen)" OFF)
+option(HSM4C_BUILD_FUZZERS "Build the hsm4c libFuzzer target (requires Clang)" OFF)
 option(HSM4C_INSTALL "Generate the hsm4c install rules" ${PROJECT_IS_TOP_LEVEL})
 
 # Library configuration, see "Configuration" in src/hsm4c/hsm4c.h
@@ -34,6 +35,10 @@ endif()
 
 if(HSM4C_BUILD_EXAMPLES)
   add_subdirectory(examples)
+endif()
+
+if(HSM4C_BUILD_FUZZERS)
+  add_subdirectory(fuzz)
 endif()
 
 if(HSM4C_BUILD_DOCS)
