@@ -116,11 +116,12 @@ static Transition const *find_transition(State const *const root, EventType even
   return NULL;
 }
 
-/** \brief run active state, return if a new state got returned, NULL otherwise. */
+/** \brief run active state, return if a new state got returned, NULL otherwise.
+ * Returning the running state itself or the current leaf means "no change". */
 static State *run_state(State const *const root, State *s, EventType e) {
   if (s->config->run_fn) {
     State *target_state = s->config->run_fn(s, e);
-    if (target_state && target_state != root->_active) {
+    if (target_state && target_state != s && target_state != root->_active) {
       return target_state;
     }
   }
@@ -138,29 +139,41 @@ static State *ancestors_run(State const *root, EventType event) {
   return NULL;
 }
 
-/** \brief Depending on active state type, return target state. */
-static State *get_target_state_from_type(Transition const *const t) {
+/** \brief Last active direct child of parent. The root node stores the active leaf instead. */
+static State *active_child(State const *parent) {
+  if (parent->config->parent != NULL) {
+    return parent->_active;
+  }
+  State *s = parent->_active;
+  while (s != NULL && s->config->parent != parent) {
+    s = s->config->parent;
+  }
+  return s;
+}
+
+/** \brief Depending on target state type, return the real target state. */
+static State *get_target_state_from_type(State *to) {
+  State *const parent = to->config->parent;
+  State *fallback = NULL;
   State *target_state = NULL;
-  switch (t->to->config->type) {
+  switch (to->config->type) {
   case SC_TYPE_NORMAL:
   case SC_TYPE_CHOICE:
-    target_state = t->to;
+    target_state = to;
     break;
   case SC_TYPE_HISTORY:
-    if (!t->to->config->parent->_active) {
-      if (t->to->config->initial) {
-        target_state = t->to->config->initial;
-      } else {
-        target_state = t->to->config->parent->config->initial;
-      }
-    } else {
-      target_state = t->to->config->parent->_active;
-    }
-    break;
   case SC_TYPE_HISTORY_DEEP:
-    target_state = find_leaf(t->to->config->parent);
-    if (target_state == t->to->config->parent) {
-      target_state = t->to->config->initial;
+    fallback = to->config->initial ? to->config->initial : parent->config->initial;
+    if (to->config->type == SC_TYPE_HISTORY) {
+      target_state = active_child(parent);
+    } else {
+      target_state = find_leaf(parent);
+      if (target_state == parent) {
+        target_state = NULL;
+      }
+    }
+    if (!target_state) {
+      target_state = fallback;
     }
     break;
   case SC_TYPE_ROOT:
@@ -168,6 +181,54 @@ static State *get_target_state_from_type(Transition const *const t) {
     break;
   }
   return target_state;
+}
+
+/** \brief Execute a single transition from the active leaf. */
+static void execute_transition(State *root, State const *from, State *to, TransitionType type,
+                               transition_fn action) {
+  // Handle StateType
+  State *target_state = get_target_state_from_type(to);
+
+  // Internal transition (local, same -> same): no exit/entry, configuration unchanged.
+  if (type == SC_TTYPE_LOCAL && from == target_state) {
+    if (action) {
+      action(root);
+    }
+    return;
+  }
+
+  // Find common ancestor of source and target
+  State *ca = fca(from, target_state);
+
+  State *from_leaf = root->_active;
+
+  // Set target branch active states to reach target
+  walk_up_set_active_state(target_state, ca);
+
+  // Local transitions do not exit the containing state
+  if (type == SC_TTYPE_LOCAL) {
+    ca = ca->_active;
+  }
+
+  // Exit all states on the active branch until ancestor
+  walk_up_exit(root, from_leaf, ca);
+
+  // Transition
+  if (action) {
+    action(root);
+  }
+
+  // Entry target branch incl. target (target not re-entered if it is the local container)
+  if (ca != target_state) {
+    walk_down_entry(ca->_active, target_state);
+  }
+
+  // We might have not initialized this state yet
+  State *leaf = walk_down_init(target_state);
+
+  // Walk down until leaf
+  walk_down_entry(target_state->_active, leaf);
+  root->_active = leaf;
 }
 
 /* -------- Public -------- */
@@ -190,61 +251,21 @@ void sc_reset_state(State *state) { state->_active = NULL; }
 State const *sc_get_root(State const *s) { return find_root(s); }
 
 State const *sc_run(State *root, EventType event) {
-
   Transition const *t = find_transition(root, event);
+  State *run_target = t ? NULL : ancestors_run(root, event);
 
-  if (!t) {
-    State *requested_state = ancestors_run(root, event);
-    if (requested_state) {
-      t = &(Transition const){.from = root->_active, .to = requested_state};
+  while (t || run_target) {
+    if (t) {
+      execute_transition(root, t->from, t->to, t->type, t->transition_fn);
+    } else {
+      execute_transition(root, root->_active, run_target, SC_TTYPE_EXTERNAL, NULL);
     }
-  }
-
-  while (t) {
-    // Handle StateType
-    State *target_state = get_target_state_from_type(t);
-
-    // Find common ancestor of active leaf and target
-    State *ca = fca(t->from, target_state);
-
-    State *from_leaf = NULL;
-
-    from_leaf = root->_active;
-
-    // Set target branch active states to reach target
-    walk_up_set_active_state(target_state, ca);
-
-    // Exit all states on the active branch until ancestor
-    if (t->type == SC_TTYPE_LOCAL) {
-      ca = ca->_active;
-    }
-    walk_up_exit(root, from_leaf, ca);
-
-    // Transition
-    if (t->transition_fn)
-      t->transition_fn(root);
-
-    // Entry target branch incl. target
-    walk_down_entry(ca->_active, target_state);
-
-    // We might have not initialized this state yet
-    from_leaf = walk_down_init(target_state);
-
-    // Walk down until leaf
-    walk_down_entry(target_state->_active, from_leaf);
-    root->_active = from_leaf ? from_leaf : target_state;
-    t = NULL;
 
     // Check transitions of current state with no event
     t = find_transition(root, SC_NO_EVENT);
 
     // Run all "run" functions including parents, continue change if requested
-    if (!t) {
-      State *requested_state = ancestors_run(root, event);
-      if (requested_state) {
-        t = &(Transition const){.from = root->_active, .to = requested_state};
-      }
-    }
+    run_target = t ? NULL : ancestors_run(root, event);
   }
 
   return root->_active;

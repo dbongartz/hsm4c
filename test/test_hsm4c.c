@@ -94,7 +94,8 @@ enum events {
   EV_9,
   EV_10,
   EV_11,
-  EV_12
+  EV_12,
+  EV_13
 };
 
 State states[_NUM_STATES] = {};
@@ -126,6 +127,7 @@ static Transition const transitions_a[] = {
     {&states[A], &states[B], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
     {&states[A], &states[BB], EV_2, t_action, t_guard, SC_TTYPE_EXTERNAL},
     {&states[A], &states[B_H], EV_7, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&states[A], &states[A], EV_13, t_action, t_guard, SC_TTYPE_LOCAL},
     SC_TRANSITIONS_END,
 };
 static Transition const transitions_b[] = {
@@ -653,23 +655,23 @@ void test_sc_AA_to_AAB_internal(void) {
   sc_run(&states[ROOT], EV_10);
 }
 
-void test_sc_AAB_to_AA_internal(void) {
+void test_sc_AAB_to_AA_local(void) {
   ignore_state_and_transition_fn();
   sc_init(&states[ROOT]);
   sc_run(&states[ROOT], EV_10);
   stop_ignore_state_and_transition_fn();
 
+  // Local child -> parent: AA is not exited/entered, only re-initialized.
   t_guard_ExpectAndReturn(&states[ROOT], true);
   s_exit_Expect(&states[AAB]);
   t_action_Expect(&states[ROOT]);
-  s_entry_Expect(&states[AAB]); // Why is this? How should it be?
-  s_run_ExpectAndReturn(&states[AAB], EV_10, NULL);
-  s_run_ExpectAndReturn(&states[AA], EV_10, NULL);
-  s_run_ExpectAndReturn(&states[A], EV_10, NULL);
-  s_run_ExpectAndReturn(&states[ROOT], EV_10, NULL);
+  s_entry_Expect(&states[AAA]);
+  s_run_ExpectAndReturn(&states[AAA], EV_12, NULL);
+  s_run_ExpectAndReturn(&states[AA], EV_12, NULL);
+  s_run_ExpectAndReturn(&states[A], EV_12, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_12, NULL);
 
-  sc_run(&states[ROOT], EV_10);
-  TEST_MESSAGE("TODO. Don't undertand the specs yet");
+  sc_run(&states[ROOT], EV_12);
 }
 
 void test_sc_AAA_to_AAA_internal(void) {
@@ -685,6 +687,35 @@ void test_sc_AAA_to_AAA_internal(void) {
   s_run_ExpectAndReturn(&states[ROOT], EV_11, NULL);
 
   sc_run(&states[ROOT], EV_11);
+}
+
+void test_sc_A_to_A_internal_composite(void) {
+  ignore_state_and_transition_fn();
+  sc_init(&states[ROOT]);
+  stop_ignore_state_and_transition_fn();
+
+  // Internal transition on a composite state must not exit/enter any substate.
+  t_guard_ExpectAndReturn(&states[ROOT], true);
+  t_action_Expect(&states[ROOT]);
+  s_run_ExpectAndReturn(&states[AAA], EV_13, NULL);
+  s_run_ExpectAndReturn(&states[AA], EV_13, NULL);
+  s_run_ExpectAndReturn(&states[A], EV_13, NULL);
+  s_run_ExpectAndReturn(&states[ROOT], EV_13, NULL);
+
+  TEST_ASSERT_EQUAL_PTR(&states[AAA], sc_run(&states[ROOT], EV_13));
+}
+
+void test_sc_run_returning_own_composite_state_is_no_change(void) {
+  ignore_state_and_transition_fn();
+  sc_init(&states[ROOT]);
+  stop_ignore_state_and_transition_fn();
+
+  s_run_ExpectAndReturn(&states[AAA], EV_NO_EVENT, NULL);
+  s_run_ExpectAndReturn(&states[AA], EV_NO_EVENT, NULL);
+  s_run_ExpectAndReturn(&states[A], EV_NO_EVENT, &states[A]);
+  s_run_ExpectAndReturn(&states[ROOT], EV_NO_EVENT, NULL);
+
+  TEST_ASSERT_EQUAL_PTR(&states[AAA], sc_run(&states[ROOT], EV_NO_EVENT));
 }
 
 /*

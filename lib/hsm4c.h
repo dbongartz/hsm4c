@@ -86,8 +86,9 @@ typedef enum TransitionType {
   /**
    * \brief Local transition. Source is not exited.
    *
-   * Must be "Parent -> Child" or "Same -> Same"
-   * When "Same -> Same" no entry and exit function is executed (internal transition)
+   * Must be "Parent -> Child", "Child -> Parent" or "Same -> Same".
+   * When "Same -> Same" no entry and exit function is executed (internal transition).
+   * When "Child -> Parent" the parent is not exited/entered, only re-initialized.
    */
   SC_TTYPE_LOCAL,
 
@@ -116,7 +117,8 @@ typedef void (*entry_fn)(State const *s);
  * \param s   Current state.
  * \param e   Event of transition if any. SC_NO_EVENT if not in transition.
  *
- * \return    Valid state to trigger immediate transition. NULL to not change state.
+ * \return    Valid state to trigger immediate transition. NULL, s itself or the current
+ *            leaf state to not change state.
  *
  * \attention Transition in run are not visible in the transition table.
  *            Be careful with this.
@@ -172,7 +174,7 @@ struct StateConfig {
   entry_fn const entry_fn;
   /** \brief Run function. Can change state. After transition or when no transition (optional) */
   run_fn const run_fn;
-  /** \brief Entry function. After transition guard. (optional) */
+  /** \brief Exit function. After transition guard. (optional) */
   exit_fn const exit_fn;
   /** \brief Parent state. Must be statchart root or NULL if this is root state. (mandatory) */
   State *const parent;
@@ -200,7 +202,6 @@ struct State {
  * To reset all states please iterate with `sc_reset_state()`.
  *
  * \param root          Statechart root state.
- * \param transitions   Transition table. Last element must be SC_TRANSITIONS_END.
  *
  * \return              Leaf state after init.
  */
