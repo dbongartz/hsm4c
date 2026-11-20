@@ -55,6 +55,16 @@
 extern "C" {
 #endif
 
+#ifndef HSM4C_MAX_TRANSITIONS
+/**
+ * \brief Maximum number of transitions taken by one hsm4c_init() or hsm4c_run() call.
+ *
+ * Stops endless chains, e.g. a cycle of always enabled automatic transitions. Define it when
+ * compiling the library to change it.
+ */
+#define HSM4C_MAX_TRANSITIONS 64
+#endif
+
 #ifndef HSM4C_STATE_ID_TYPE
 /** \brief Unsigned integer type of state IDs. Define it before including to change it. */
 #define HSM4C_STATE_ID_TYPE uint16_t
@@ -65,6 +75,19 @@ typedef HSM4C_STATE_ID_TYPE hsm4c_state_id_t;
 
 /** \brief Event identifier. User events must be > 0, see hsm4c_reserved_event_t. */
 typedef int hsm4c_event_id_t;
+
+/** \brief Result of hsm4c_init() and hsm4c_run(). */
+typedef enum hsm4c_result {
+  /** \brief Success. */
+  HSM4C_OK = 0,
+  /**
+   * \brief More than HSM4C_MAX_TRANSITIONS transitions would have been taken.
+   *
+   * Processing stopped before the next transition. The machine is in a consistent state and
+   * hsm4c_current() reports the reached state.
+   */
+  HSM4C_ERR_LIMIT,
+} hsm4c_result_t;
 
 /** \brief Event: identifier and optional user data. */
 typedef struct hsm4c_event {
@@ -315,10 +338,10 @@ struct hsm4c {
  * \param active  Runtime storage of `chart->num_states` elements. Must outlive the machine.
  * \param ctx     User context for the callbacks, see hsm4c_ctx(). Can be NULL.
  *
- * \return        Active leaf state after init.
+ * \return        HSM4C_OK, or an error. The active state is available with hsm4c_current().
  */
-hsm4c_state_id_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_id_t *active,
-                            void *ctx);
+hsm4c_result_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_id_t *active,
+                          void *ctx);
 
 /**
  * \brief Processes one event.
@@ -334,9 +357,9 @@ hsm4c_state_id_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state
  * \param event   Event to process. Must be > 0, or HSM4C_NO_EVENT to only poll.
  * \param data    User data passed with the event to the callbacks. Can be NULL.
  *
- * \return        Active leaf state after processing.
+ * \return        HSM4C_OK, or an error. The active state is available with hsm4c_current().
  */
-hsm4c_state_id_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event, void *data);
+hsm4c_result_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event, void *data);
 
 /**
  * \brief Gets the user context given to hsm4c_init().

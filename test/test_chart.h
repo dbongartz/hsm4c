@@ -51,12 +51,14 @@ extern hsm4c_chart_t const chart;
  *
  * XROOT (initial XP; XQ on EV_5)
  * +- XP (initial XPA; XQ on EV_1)
- * |  +- XPA (XR automatic [x_auto], XPB on EV_1, XQ on EV_2, targetless on EV_3)
+ * |  +- XPA (XR automatic [x_auto], XPB on EV_1, XQ on EV_2, targetless on EV_3, XL1 on EV_6)
  * |  +- XPB
  * +- XQ
  * +- XR
+ * +- XL1 (XL2 automatic)
+ * +- XL2 (XL1 automatic)
  */
-enum xstates { XROOT, XP, XPA, XPB, XQ, XR, NUM_XSTATES };
+enum xstates { XROOT, XP, XPA, XPB, XQ, XR, XL1, XL2, NUM_XSTATES };
 
 extern hsm4c_chart_t const xchart;
 

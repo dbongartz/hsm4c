@@ -94,9 +94,9 @@ struct Fixture {
 
   /** \brief Init the chart and run the given events without recording calls. */
   void prepare(std::vector<hsm4c_event_id_t> const &events = {}) {
-    hsm4c_init(&sm, &chart, active, &ctx);
+    CHECK(hsm4c_init(&sm, &chart, active, &ctx) == HSM4C_OK);
     for (hsm4c_event_id_t e : events) {
-      hsm4c_run(&sm, e, nullptr);
+      CHECK(hsm4c_run(&sm, e, nullptr) == HSM4C_OK);
     }
     calls.clear();
   }
@@ -104,7 +104,8 @@ struct Fixture {
   /** \brief Run one event and return the recorded calls. */
   Log run(hsm4c_event_id_t e) {
     calls.clear();
-    last = hsm4c_run(&sm, e, nullptr);
+    CHECK(hsm4c_run(&sm, e, nullptr) == HSM4C_OK);
+    last = hsm4c_current(&sm);
     return calls;
   }
 
@@ -134,12 +135,12 @@ static Log operator+(Log a, Log const &b) {
 /* -------- TESTS -------- */
 
 TEST_CASE_FIXTURE(Fixture, "initial") {
-  hsm4c_init(&sm, &chart, active, &ctx);
+  CHECK(hsm4c_init(&sm, &chart, active, &ctx) == HSM4C_OK);
   CHECK(calls == Log{"+ROOT", "+A", "+AA", "+AAA"});
 
   // Double init to check if it resets accordingly
   calls.clear();
-  hsm4c_init(&sm, &chart, active, &ctx);
+  CHECK(hsm4c_init(&sm, &chart, active, &ctx) == HSM4C_OK);
   CHECK(calls == Log{"+ROOT", "+A", "+AA", "+AAA"});
 }
 
@@ -158,7 +159,7 @@ TEST_CASE_FIXTURE(Fixture, "callbacks get the user context") {
 TEST_CASE_FIXTURE(Fixture, "callbacks get the event and its data") {
   prepare();
   int payload = 0;
-  hsm4c_run(&sm, EV_1, &payload);
+  CHECK(hsm4c_run(&sm, EV_1, &payload) == HSM4C_OK);
   CHECK(guard_event.id == EV_1);
   CHECK(guard_event.data == &payload);
   CHECK(action_event.id == EV_1);
@@ -295,26 +296,28 @@ struct XFixture : Fixture {
   hsm4c_state_id_t xactive[NUM_XSTATES]{};
 
   void xprepare() {
-    hsm4c_init(&sm, &xchart, xactive, &ctx);
+    CHECK(hsm4c_init(&sm, &xchart, xactive, &ctx) == HSM4C_OK);
     calls.clear();
   }
 
   Log xrun(hsm4c_event_id_t e) {
     calls.clear();
-    last = hsm4c_run(&sm, e, nullptr);
+    CHECK(hsm4c_run(&sm, e, nullptr) == HSM4C_OK);
+    last = hsm4c_current(&sm);
     return calls;
   }
 };
 
 TEST_CASE_FIXTURE(XFixture, "init takes automatic transitions") {
   x_auto_return = true;
-  CHECK(hsm4c_init(&sm, &xchart, xactive, &ctx) == XR);
+  CHECK(hsm4c_init(&sm, &xchart, xactive, &ctx) == HSM4C_OK);
+  CHECK(hsm4c_current(&sm) == XR);
   // No run functions on init
   CHECK(calls == Log{"+XROOT", "+XP", "+XPA", "auto", "-XPA", "-XP", "+XR"});
 }
 
 TEST_CASE_FIXTURE(XFixture, "automatic transitions get no event during init") {
-  hsm4c_init(&sm, &xchart, xactive, &ctx);
+  CHECK(hsm4c_init(&sm, &xchart, xactive, &ctx) == HSM4C_OK);
   CHECK(x_auto_event.id == HSM4C_NO_EVENT);
   CHECK(x_auto_event.data == nullptr);
 }
@@ -323,7 +326,8 @@ TEST_CASE_FIXTURE(XFixture, "automatic transitions get the processed event") {
   xprepare();
   x_auto_return = true;
   int payload = 0;
-  CHECK(hsm4c_run(&sm, EV_4, &payload) == XR);
+  CHECK(hsm4c_run(&sm, EV_4, &payload) == HSM4C_OK);
+  CHECK(hsm4c_current(&sm) == XR);
   CHECK(x_auto_event.id == EV_4);
   CHECK(x_auto_event.data == &payload);
 }
@@ -356,6 +360,24 @@ TEST_CASE_FIXTURE(XFixture, "targetless transition only executes its action") {
 TEST_CASE_FIXTURE(XFixture, "transition with root as source does not exit the root") {
   xprepare();
   CHECK(xrun(EV_5) == Log{"guard", "-XPA", "-XP", "act", "+XQ"} + xruns({XQ, XROOT}, EV_5));
+}
+
+TEST_CASE_FIXTURE(XFixture, "endless automatic transitions stop at the limit") {
+  xprepare();
+  CHECK(hsm4c_run(&sm, EV_6, nullptr) == HSM4C_ERR_LIMIT);
+
+  // XPA -> XL1, then XL1 <-> XL2 until HSM4C_MAX_TRANSITIONS transitions are taken
+  int entries = 0;
+  for (auto const &c : calls) {
+    entries += (c == "+XL1" || c == "+XL2") ? 1 : 0;
+  }
+  CHECK(entries == HSM4C_MAX_TRANSITIONS);
+
+  // Consistent state: the reached state is active, the machine keeps working
+  hsm4c_state_id_t const reached = hsm4c_current(&sm);
+  CHECK((reached == XL1 || reached == XL2));
+  CHECK(hsm4c_is_active(&sm, reached));
+  CHECK(hsm4c_run(&sm, HSM4C_NO_EVENT, nullptr) == HSM4C_ERR_LIMIT);
 }
 
 /*

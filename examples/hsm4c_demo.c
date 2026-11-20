@@ -179,13 +179,17 @@ int main(void) {
   hsm4c_state_id_t active[NUM_STATES];
 
   printf("hsm4c_init()\n");
-  hsm4c_state_id_t current = hsm4c_init(&sm, &my_chart, active, &app);
-  printf("-> %s\n\n", state_name(current));
+  if (hsm4c_init(&sm, &my_chart, active, &app) != HSM4C_OK) {
+    return 1;
+  }
+  printf("-> %s\n\n", state_name(hsm4c_current(&sm)));
 
   for (size_t i = 0; i < sizeof(steps) / sizeof(steps[0]); ++i) {
     printf("hsm4c_run(%d), expected: %s\n", steps[i].event, steps[i].expected);
-    current = hsm4c_run(&sm, steps[i].event, NULL);
-    printf("-> %s\n\n", state_name(current));
+    if (hsm4c_run(&sm, steps[i].event, NULL) != HSM4C_OK) {
+      return 1;
+    }
+    printf("-> %s\n\n", state_name(hsm4c_current(&sm)));
   }
 
   return 0;

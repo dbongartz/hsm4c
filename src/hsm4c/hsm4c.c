@@ -175,21 +175,6 @@ static hsm4c_transition_t const *find_transition(hsm4c_t const *sm, hsm4c_event_
 }
 
 /**
- * \brief Takes the enabled transition for the event ID, if any. event is passed to the callbacks.
- *
- * \return true if a transition was taken.
- */
-static bool take_transition(hsm4c_t *sm, hsm4c_event_id_t id, hsm4c_event_t const *event) {
-  hsm4c_state_id_t source = HSM4C_ROOT;
-  hsm4c_transition_t const *const t = find_transition(sm, id, event, &source);
-  if (!t) {
-    return false;
-  }
-  execute_transition(sm, source, t->to, t->type, t->action_fn, event);
-  return true;
-}
-
-/**
  * \brief Calls the run functions of the active branch, leaf first.
  *
  * \return The first requested state change, HSM4C_NO_STATE if none.
@@ -215,27 +200,43 @@ static hsm4c_state_id_t run_states(hsm4c_t *sm, hsm4c_event_t const *event) {
  *
  * With run_fns, run functions are called whenever no automatic transition is enabled and can
  * request further transitions.
+ *
+ * \param taken   Transitions already taken in this call, counted against HSM4C_MAX_TRANSITIONS.
  */
-static void settle(hsm4c_t *sm, hsm4c_event_t const *event, bool run_fns) {
+static hsm4c_result_t settle(hsm4c_t *sm, hsm4c_event_t const *event, bool run_fns,
+                             unsigned taken) {
   for (;;) {
-    if (take_transition(sm, HSM4C_NO_EVENT, event)) {
-      continue;
+    hsm4c_state_id_t source = HSM4C_ROOT;
+    hsm4c_transition_t const *const t = find_transition(sm, HSM4C_NO_EVENT, event, &source);
+    hsm4c_state_id_t run_target = HSM4C_NO_STATE;
+    if (!t) {
+      if (!run_fns) {
+        return HSM4C_OK;
+      }
+      run_target = run_states(sm, event);
+      if (run_target == HSM4C_NO_STATE) {
+        return HSM4C_OK;
+      }
     }
-    if (!run_fns) {
-      return;
+
+    // Stop endless chains of transitions, e.g. a cycle of always enabled automatic transitions
+    if (taken >= HSM4C_MAX_TRANSITIONS) {
+      return HSM4C_ERR_LIMIT;
     }
-    hsm4c_state_id_t const run_target = run_states(sm, event);
-    if (run_target == HSM4C_NO_STATE) {
-      return;
+    ++taken;
+
+    if (t) {
+      execute_transition(sm, source, t->to, t->type, t->action_fn, event);
+    } else {
+      execute_transition(sm, sm->leaf, run_target, HSM4C_TRANSITION_EXTERNAL, NULL, event);
     }
-    execute_transition(sm, sm->leaf, run_target, HSM4C_TRANSITION_EXTERNAL, NULL, event);
   }
 }
 
 /* -------- Public -------- */
 
-hsm4c_state_id_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_id_t *active,
-                            void *ctx) {
+hsm4c_result_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_id_t *active,
+                          void *ctx) {
   sm->chart = chart;
   sm->active = active;
   sm->ctx = ctx;
@@ -246,21 +247,24 @@ hsm4c_state_id_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state
   enter(sm, HSM4C_ROOT);
   sm->leaf = enter_initial(sm, HSM4C_ROOT);
   hsm4c_event_t const no_event = {HSM4C_NO_EVENT, NULL};
-  settle(sm, &no_event, false);
-  return sm->leaf;
+  return settle(sm, &no_event, false, 0);
 }
 
-hsm4c_state_id_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event, void *data) {
+hsm4c_result_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event, void *data) {
   hsm4c_event_t const ev = {event, data};
+  unsigned taken = 0;
 
   // Event transitions first, automatic transitions afterwards (SCXML macrostep)
   if (event != HSM4C_NO_EVENT) {
-    (void)take_transition(sm, event, &ev);
+    hsm4c_state_id_t source = HSM4C_ROOT;
+    hsm4c_transition_t const *const t = find_transition(sm, event, &ev, &source);
+    if (t) {
+      execute_transition(sm, source, t->to, t->type, t->action_fn, &ev);
+      ++taken;
+    }
   }
 
-  settle(sm, &ev, true);
-
-  return sm->leaf;
+  return settle(sm, &ev, true, taken);
 }
 
 void *hsm4c_ctx(hsm4c_t const *sm) { return sm->ctx; }
