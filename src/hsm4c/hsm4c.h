@@ -90,9 +90,11 @@ extern "C" {
 
 #ifndef HSM4C_MAX_TRANSITIONS
 /**
- * \brief Maximum number of transitions taken by one hsm4c_init() or hsm4c_run() call.
+ * \brief Maximum length of a chain of transitions in one hsm4c_init() or hsm4c_run() call.
  *
- * Stops endless chains, e.g. a cycle of always enabled automatic transitions. Library only.
+ * Counts transitions taken for automatic transitions, internal events and run function
+ * requests, not the one for the hsm4c_run() event itself. Stops endless chains, e.g. a cycle of
+ * always enabled automatic transitions. Library only.
  */
 #define HSM4C_MAX_TRANSITIONS 64
 #endif
@@ -122,7 +124,7 @@ typedef enum hsm4c_result {
   /** \brief Success. */
   HSM4C_OK = 0,
   /**
-   * \brief More than HSM4C_MAX_TRANSITIONS transitions would have been taken.
+   * \brief A chain of more than HSM4C_MAX_TRANSITIONS transitions would have been taken.
    *
    * Processing stopped before the next transition. The machine is in a consistent state and
    * hsm4c_current() reports the reached state. Internal events not processed yet stay queued.

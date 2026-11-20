@@ -52,14 +52,20 @@ extern hsm4c_chart_t const chart;
  * XROOT (initial XP; XQ on EV_5)
  * +- XP (initial XPA; XQ on EV_1)
  * |  +- XPA (XR automatic [x_auto], XPB on EV_1, XQ on EV_2, targetless on EV_3, XL1 on EV_6,
- * |         XPB on EV_7 / x_raise)
+ * |         XPB on EV_7 / x_raise, XS_DH on EV_9, targetless without action on EV_11,
+ * |         XM1 on EV_12)
  * |  +- XPB (XR on EV_8)
  * +- XQ
  * +- XR
  * +- XL1 (XL2 automatic)
  * +- XL2 (XL1 automatic)
+ * +- XS (initial XSA)
+ * |  +- XS_DH  deep history without own initial
+ * |  +- XSA
+ * +- XM1 (XM2 on EV_13 / x_ping)
+ * +- XM2 (XM1 on EV_13 / x_ping)
  */
-enum xstates { XROOT, XP, XPA, XPB, XQ, XR, XL1, XL2, NUM_XSTATES };
+enum xstates { XROOT, XP, XPA, XPB, XQ, XR, XL1, XL2, XS, XS_DH, XSA, XM1, XM2, NUM_XSTATES };
 
 extern hsm4c_chart_t const xchart;
 
@@ -73,6 +79,7 @@ bool t_choice_A(hsm4c_t const *sm, hsm4c_event_t const *event);
 bool t_choice_B(hsm4c_t const *sm, hsm4c_event_t const *event);
 bool x_auto(hsm4c_t const *sm, hsm4c_event_t const *event);
 void x_raise(hsm4c_t *sm, hsm4c_event_t const *event);
+void x_ping(hsm4c_t *sm, hsm4c_event_t const *event);
 
 #ifdef __cplusplus
 }

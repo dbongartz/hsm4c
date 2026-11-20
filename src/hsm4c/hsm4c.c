@@ -470,22 +470,21 @@ hsm4c_result_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event, void *data) {
 
   hsm4c_event_t current = {HSM4C_NO_EVENT, NULL};
   unsigned taken = 0;
-  hsm4c_result_t r = HSM4C_OK;
 
   // Internal events raised outside of a call come before the new event (SCXML)
-  if (sm->queue_len > 0) {
-    r = settle(sm, &current, false, &taken);
-  }
+  hsm4c_result_t r = sm->queue_len > 0 ? settle(sm, &current, false, &taken) : HSM4C_OK;
 
-  // The event's transition first, then automatic transitions and internal events
+  // The event's transition first, then automatic transitions and internal events. The event's
+  // own transition is not counted: a single transition is no chain.
   if (r == HSM4C_OK) {
     current.id = event;
     current.data = data;
-    if (event != HSM4C_NO_EVENT) {
-      r = take_event(sm, &current, &taken);
+    hsm4c_state_id_t source = HSM4C_ROOT;
+    hsm4c_transition_t const *const t =
+        event != HSM4C_NO_EVENT ? find_transition(sm, event, &current, &source) : NULL;
+    if (t) {
+      execute_transition(sm, source, t->to, t->type, action_of(t), &current);
     }
-  }
-  if (r == HSM4C_OK) {
     r = settle(sm, &current, true, &taken);
   }
 

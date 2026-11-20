@@ -74,6 +74,9 @@ void x_raise(hsm4c_t *sm, hsm4c_event_t const * /*event*/) {
   raise_result = hsm4c_raise(sm, EV_8, nullptr);
   reenter_result = hsm4c_run(sm, EV_1, nullptr);
 }
+void x_ping(hsm4c_t *sm, hsm4c_event_t const * /*event*/) {
+  raise_result = hsm4c_raise(sm, EV_13, nullptr);
+}
 bool x_auto(hsm4c_t const * /*sm*/, hsm4c_event_t const *event) {
   x_auto_event = *event;
   calls.push_back("auto");
@@ -287,6 +290,7 @@ TEST_CASE_FIXTURE(Fixture, "A to A internal on composite state") {
 TEST_CASE_FIXTURE(Fixture, "run returning own composite state is no change") {
   prepare();
   run_return[A] = A;
+  run_return[AA] = AAA; // The current leaf is also no change
   CHECK(run(EV_NO_EVENT) == runs({AAA, AA, A, ROOT}, EV_NO_EVENT));
   CHECK(last == AAA);
 }
@@ -296,6 +300,22 @@ TEST_CASE_FIXTURE(Fixture, "false guard takes no transition") {
   guard_return = false;
   CHECK(run(EV_1) == Log{"guard"} + runs({AAA, AA, A, ROOT}, EV_1));
   CHECK(last == AAA);
+}
+
+TEST_CASE_FIXTURE(Fixture, "run functions can trigger transitions") {
+  prepare();
+  run_return[AAA] = AB;
+  CHECK(run(EV_NO_EVENT) ==
+        runs({AAA}, EV_NO_EVENT) + Log{"-AAA", "-AA", "+AB"} + runs({AB, A, ROOT}, EV_NO_EVENT));
+  CHECK(last == AB);
+}
+
+TEST_CASE_FIXTURE(Fixture, "endless run function transitions stop at the limit") {
+  prepare();
+  run_return[AAA] = AAB;
+  run_return[AAB] = AAA;
+  CHECK(hsm4c_run(&sm, HSM4C_NO_EVENT, nullptr) == HSM4C_ERR_LIMIT);
+  CHECK(hsm4c_is_active(&sm, hsm4c_current(&sm)));
 }
 
 /* -------- SCXML SEMANTICS -------- */
@@ -374,12 +394,13 @@ TEST_CASE_FIXTURE(XFixture, "endless automatic transitions stop at the limit") {
   xprepare();
   CHECK(hsm4c_run(&sm, EV_6, nullptr) == HSM4C_ERR_LIMIT);
 
-  // XPA -> XL1, then XL1 <-> XL2 until HSM4C_MAX_TRANSITIONS transitions are taken
+  // XPA -> XL1 for the event, then XL1 <-> XL2 until HSM4C_MAX_TRANSITIONS automatic
+  // transitions are taken
   int entries = 0;
   for (auto const &c : calls) {
     entries += (c == "+XL1" || c == "+XL2") ? 1 : 0;
   }
-  CHECK(entries == HSM4C_MAX_TRANSITIONS);
+  CHECK(entries == HSM4C_MAX_TRANSITIONS + 1);
 
   // Consistent state: the reached state is active, the machine keeps working
   hsm4c_state_id_t const reached = hsm4c_current(&sm);
@@ -410,12 +431,46 @@ TEST_CASE_FIXTURE(XFixture, "events raised outside a call come before the next e
   CHECK(last == XPB);
 }
 
+TEST_CASE_FIXTURE(XFixture, "internal events without transition are discarded") {
+  xprepare();
+  CHECK(hsm4c_raise(&sm, EV_4, nullptr) == HSM4C_OK);
+  // XPA's automatic transition is checked before and after the queued event, and again after the
+  // polled event
+  CHECK(xrun(HSM4C_NO_EVENT) ==
+        Log{"auto", "auto", "auto"} + xruns({XPA, XP, XROOT}, HSM4C_NO_EVENT));
+  CHECK(sm.queue_len == 0);
+  CHECK(last == XPA);
+}
+
 TEST_CASE_FIXTURE(XFixture, "raising into a full queue fails") {
   xprepare();
   for (int i = 0; i < HSM4C_EVENT_QUEUE_SIZE; ++i) {
     CHECK(hsm4c_raise(&sm, EV_4, nullptr) == HSM4C_OK);
   }
   CHECK(hsm4c_raise(&sm, EV_4, nullptr) == HSM4C_ERR_QUEUE_FULL);
+}
+
+TEST_CASE_FIXTURE(XFixture, "deep history without history falls back to the parent's initial") {
+  xprepare();
+  CHECK(xrun(EV_9) == Log{"-XPA", "-XP", "+XS", "+XSA"} + xruns({XSA, XS, XROOT}, EV_9));
+}
+
+TEST_CASE_FIXTURE(XFixture, "targetless transition without action changes nothing") {
+  xprepare();
+  CHECK(xrun(EV_11) == Log{"auto"} + xruns({XPA, XP, XROOT}, EV_11));
+  CHECK(last == XPA);
+}
+
+TEST_CASE_FIXTURE(XFixture, "endless internal events stop at the limit and stay queued") {
+  xprepare();
+  xrun(EV_12); // XM1
+  CHECK(hsm4c_raise(&sm, EV_13, nullptr) == HSM4C_OK);
+
+  // Processed before the next event: each EV_13 transition raises the next EV_13
+  CHECK(hsm4c_run(&sm, EV_1, nullptr) == HSM4C_ERR_LIMIT);
+  CHECK(sm.queue_len == 1);
+  CHECK((hsm4c_current(&sm) == XM1 || hsm4c_current(&sm) == XM2));
+  CHECK(hsm4c_run(&sm, EV_1, nullptr) == HSM4C_ERR_LIMIT);
 }
 
 /* -------- VALIDATION -------- */
@@ -454,8 +509,13 @@ TEST_CASE("test charts are valid") {
 }
 
 TEST_CASE("empty charts are invalid") {
-  hsm4c_chart_t const empty{nullptr, 0};
-  CHECK(hsm4c_validate(&empty, nullptr) == HSM4C_ERR_INVALID_CHART);
+  States const s = valid_states();
+  hsm4c_chart_t const no_states{nullptr, 3};
+  hsm4c_chart_t const zero_states{s.data(), 0};
+  hsm4c_state_id_t bad = 42;
+  CHECK(hsm4c_validate(&no_states, &bad) == HSM4C_ERR_INVALID_CHART);
+  CHECK(bad == HSM4C_ROOT);
+  CHECK(hsm4c_validate(&zero_states, nullptr) == HSM4C_ERR_INVALID_CHART);
   CHECK(hsm4c_validate(nullptr, nullptr) == HSM4C_ERR_INVALID_CHART);
 }
 
@@ -487,6 +547,12 @@ TEST_CASE("initial states are direct children and not histories") {
   s[2] = state(ROOT, 1, HSM4C_STATE_HISTORY);
   s[0].initial = 2;
   CHECK(invalid_state(s) == 0);
+  s[2].type = HSM4C_STATE_HISTORY_DEEP;
+  CHECK(invalid_state(s) == 0);
+
+  s = valid_states();
+  s[0].initial = 9;
+  CHECK(invalid_state(s) == 0);
 }
 
 TEST_CASE("the root is a normal state") {
@@ -515,6 +581,14 @@ TEST_CASE("histories need a fallback below their parent") {
   s[3].initial = 4;
   CHECK(invalid_state(s) == -1);
 
+  static hsm4c_transition_t const automatic[] = {
+      {HSM4C_NO_EVENT, 1, nullptr, nullptr, HSM4C_TRANSITION_EXTERNAL}, table_end};
+  s.push_back(state(1, HSM4C_NO_STATE, HSM4C_STATE_CHOICE)); // 5, below A
+  s[5].transitions = automatic;
+  s[3].initial = 5; // Not a normal state
+  CHECK(invalid_state(s) == 3);
+  s[3].initial = 4;
+
   s[3].initial = HSM4C_NO_STATE;
   s[1].initial = 4; // Falls back to A's initial
   CHECK(invalid_state(s) == -1);
@@ -527,10 +601,20 @@ TEST_CASE("pseudo states have no callbacks, histories no transitions") {
 
   s[2].entry_fn = s_entry;
   CHECK(invalid_state(s) == 2);
+  s[2].entry_fn = nullptr;
+  s[2].exit_fn = s_exit;
+  CHECK(invalid_state(s) == 2);
+  s[2].exit_fn = nullptr;
+  s[2].run_fn = s_run;
+  CHECK(invalid_state(s) == 2);
+  s[2].run_fn = nullptr;
+
+  static hsm4c_transition_t const empty[] = {table_end};
+  s[2].transitions = empty;
+  CHECK(invalid_state(s) == -1);
 
   static hsm4c_transition_t const t[] = {{EV_1, 1, nullptr, nullptr, HSM4C_TRANSITION_EXTERNAL},
                                          table_end};
-  s[2].entry_fn = nullptr;
   s[2].transitions = t;
   CHECK(invalid_state(s) == 2);
 }

@@ -193,6 +193,18 @@ static hsm4c_transition_t const transitions_xpa[] = {
     {EV_3, HSM4C_NO_STATE, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
     {EV_6, XL1, NULL, NULL, HSM4C_TRANSITION_EXTERNAL},
     {EV_7, XPB, NULL, x_raise, HSM4C_TRANSITION_EXTERNAL},
+    {EV_9, XS_DH, NULL, NULL, HSM4C_TRANSITION_EXTERNAL},
+    {EV_11, HSM4C_NO_STATE, NULL, NULL, HSM4C_TRANSITION_EXTERNAL},
+    {EV_12, XM1, NULL, NULL, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
+};
+/* Endless chain of internal events: each transition raises the next EV_13 */
+static hsm4c_transition_t const transitions_xm1[] = {
+    {EV_13, XM2, NULL, x_ping, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
+};
+static hsm4c_transition_t const transitions_xm2[] = {
+    {EV_13, XM1, NULL, x_ping, HSM4C_TRANSITION_EXTERNAL},
     HSM4C_TRANSITIONS_END,
 };
 static hsm4c_transition_t const transitions_xpb[] = {
@@ -220,6 +232,11 @@ static hsm4c_state_t const xstates[NUM_XSTATES] = {
     [XR] = XSTATE("XR", .parent = XROOT),
     [XL1] = XSTATE("XL1", .parent = XROOT, .transitions = transitions_xl1),
     [XL2] = XSTATE("XL2", .parent = XROOT, .transitions = transitions_xl2),
+    [XS] = XSTATE("XS", .parent = XROOT, .initial = XSA),
+    [XS_DH] = {.name = "XS_DH", .parent = XS, .type = HSM4C_STATE_HISTORY_DEEP},
+    [XSA] = XSTATE("XSA", .parent = XS),
+    [XM1] = XSTATE("XM1", .parent = XROOT, .transitions = transitions_xm1),
+    [XM2] = XSTATE("XM2", .parent = XROOT, .transitions = transitions_xm2),
 };
 
 hsm4c_chart_t const chart = HSM4C_CHART(states);

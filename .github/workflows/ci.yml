@@ -76,13 +76,17 @@ jobs:
       - name: Configure, build and test
         run: cmake --workflow --preset coverage
       - name: Coverage report
-        # Summary on the run page, text report in the log, HTML report as artifact
+        # Summary on the run page, text report in the log, HTML report as artifact.
+        # The library must be fully covered. HSM4C_ASSERT branches are excluded: their failing
+        # side aborts by design.
         run: |
           mkdir -p coverage
           gcovr --root . --filter src/ build/coverage \
+            --exclude-branches-by-pattern '.*HSM4C_ASSERT.*' \
             --markdown-summary "$GITHUB_STEP_SUMMARY" \
             --html-details coverage/index.html \
-            --txt
+            --txt \
+            --fail-under-line 100 --fail-under-branch 100
       - uses: actions/upload-artifact@v7
         with:
           name: coverage-report
