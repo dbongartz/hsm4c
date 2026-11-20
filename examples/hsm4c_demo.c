@@ -40,24 +40,26 @@ static void exit_(hsm4c_t *sm, hsm4c_state_id_t state) {
   printf("  exit   %s\n", state_name(state));
 }
 
-static hsm4c_state_id_t run(hsm4c_t *sm, hsm4c_state_id_t state, hsm4c_event_id_t e) {
+static hsm4c_state_id_t run(hsm4c_t *sm, hsm4c_state_id_t state, hsm4c_event_t const *e) {
   (void)sm;
-  printf("  run    %s (event %d)\n", state_name(state), e);
+  printf("  run    %s (event %d)\n", state_name(state), e->id);
   return HSM4C_NO_STATE;
 }
 
-static hsm4c_state_id_t branch_run(hsm4c_t *sm, hsm4c_state_id_t state, hsm4c_event_id_t e) {
+static hsm4c_state_id_t branch_run(hsm4c_t *sm, hsm4c_state_id_t state, hsm4c_event_t const *e) {
   (void)sm;
-  printf("  run    %s (event %d) -> D\n", state_name(state), e);
+  printf("  run    %s (event %d) -> D\n", state_name(state), e->id);
   return D;
 }
 
 /* -------- Transition functions -------- */
 
-static void action(hsm4c_t *sm) { printf("  action (in %s)\n", state_name(hsm4c_current(sm))); }
+static void action(hsm4c_t *sm, hsm4c_event_t const *e) {
+  printf("  action (in %s, event %d)\n", state_name(hsm4c_current(sm)), e->id);
+}
 
-static bool guard(hsm4c_t const *sm) {
-  printf("  guard  (in %s)\n", state_name(hsm4c_current(sm)));
+static bool guard(hsm4c_t const *sm, hsm4c_event_t const *e) {
+  printf("  guard  (in %s, event %d)\n", state_name(hsm4c_current(sm)), e->id);
   return true;
 }
 
@@ -67,7 +69,8 @@ struct app {
 };
 
 /** \brief False on the first call, true afterwards. */
-static bool condition(hsm4c_t const *sm) {
+static bool condition(hsm4c_t const *sm, hsm4c_event_t const *e) {
+  (void)e;
   struct app *const app = hsm4c_ctx(sm);
   printf("  condition (in %s): call %d\n", state_name(hsm4c_current(sm)), app->condition_calls);
   return app->condition_calls++ >= 1;
@@ -181,7 +184,7 @@ int main(void) {
 
   for (size_t i = 0; i < sizeof(steps) / sizeof(steps[0]); ++i) {
     printf("hsm4c_run(%d), expected: %s\n", steps[i].event, steps[i].expected);
-    current = hsm4c_run(&sm, steps[i].event);
+    current = hsm4c_run(&sm, steps[i].event, NULL);
     printf("-> %s\n\n", state_name(current));
   }
 

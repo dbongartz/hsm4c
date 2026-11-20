@@ -66,6 +66,14 @@ typedef HSM4C_STATE_ID_TYPE hsm4c_state_id_t;
 /** \brief Event identifier. User events must be > 0, see hsm4c_reserved_event_t. */
 typedef int hsm4c_event_id_t;
 
+/** \brief Event: identifier and optional user data. */
+typedef struct hsm4c_event {
+  /** \brief Event identifier. */
+  hsm4c_event_id_t id;
+  /** \brief User data. Can be NULL. */
+  void *data;
+} hsm4c_event_t;
+
 /** \brief State configuration. See struct hsm4c_state. */
 typedef struct hsm4c_state hsm4c_state_t;
 /** \brief Transition table row. See struct hsm4c_transition. */
@@ -182,7 +190,7 @@ typedef void (*hsm4c_entry_fn_t)(hsm4c_t *sm, hsm4c_state_id_t state);
  *
  * \param sm      Machine.
  * \param state   State being run.
- * \param event   Event passed to hsm4c_run().
+ * \param event   Event passed to hsm4c_run(). Never NULL.
  *
  * \return        State to trigger an immediate external transition to. HSM4C_NO_STATE, the state
  *                itself or the current leaf state to not change state.
@@ -191,7 +199,7 @@ typedef void (*hsm4c_entry_fn_t)(hsm4c_t *sm, hsm4c_state_id_t state);
  *            tables. Be careful with this.
  */
 typedef hsm4c_state_id_t (*hsm4c_run_fn_t)(hsm4c_t *sm, hsm4c_state_id_t state,
-                                           hsm4c_event_id_t event);
+                                           hsm4c_event_t const *event);
 
 /**
  * \brief Exit function prototype.
@@ -205,17 +213,20 @@ typedef void (*hsm4c_exit_fn_t)(hsm4c_t *sm, hsm4c_state_id_t state);
  * \brief Transition action prototype.
  *
  * \param sm      Machine.
+ * \param event   Event being processed. For automatic transitions the event passed to
+ *                hsm4c_run(), or an HSM4C_NO_EVENT event during hsm4c_init(). Never NULL.
  */
-typedef void (*hsm4c_action_fn_t)(hsm4c_t *sm);
+typedef void (*hsm4c_action_fn_t)(hsm4c_t *sm, hsm4c_event_t const *event);
 
 /**
  * \brief Guard prototype.
  *
  * \param sm      Machine.
+ * \param event   Event being processed, as for hsm4c_action_fn_t. Never NULL.
  *
  * \return        true if the transition should be taken, false otherwise.
  */
-typedef bool (*hsm4c_guard_fn_t)(hsm4c_t const *sm);
+typedef bool (*hsm4c_guard_fn_t)(hsm4c_t const *sm, hsm4c_event_t const *event);
 
 /**
  * \brief Transition table row. The source is the state owning the table.
@@ -316,12 +327,16 @@ hsm4c_state_id_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state
  * until none is enabled. Whenever no automatic transition is enabled, the run functions of
  * the active branch are called, and can request a further transition.
  *
+ * Guards, actions and run functions receive the event, also for automatic transitions taken
+ * afterwards (like SCXML's _event, which keeps the last processed event).
+ *
  * \param sm      Machine.
  * \param event   Event to process. Must be > 0, or HSM4C_NO_EVENT to only poll.
+ * \param data    User data passed with the event to the callbacks. Can be NULL.
  *
  * \return        Active leaf state after processing.
  */
-hsm4c_state_id_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event);
+hsm4c_state_id_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event, void *data);
 
 /**
  * \brief Gets the user context given to hsm4c_init().

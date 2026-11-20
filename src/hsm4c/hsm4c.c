@@ -110,13 +110,14 @@ static hsm4c_state_id_t resolve_target(hsm4c_t const *sm, hsm4c_state_id_t to) {
 
 /** \brief Executes a single transition from the active leaf. */
 static void execute_transition(hsm4c_t *sm, hsm4c_state_id_t from, hsm4c_state_id_t to,
-                               hsm4c_transition_type_t type, hsm4c_action_fn_t action) {
+                               hsm4c_transition_type_t type, hsm4c_action_fn_t action,
+                               hsm4c_event_t const *event) {
   hsm4c_state_id_t const target = to != HSM4C_NO_STATE ? resolve_target(sm, to) : HSM4C_NO_STATE;
 
   // Targetless or local "Same -> Same": internal transition. No exit/entry, nothing changes.
   if (target == HSM4C_NO_STATE || (type == HSM4C_TRANSITION_LOCAL && from == target)) {
     if (action) {
-      action(sm);
+      action(sm, event);
     }
     return;
   }
@@ -139,7 +140,7 @@ static void execute_transition(hsm4c_t *sm, hsm4c_state_id_t from, hsm4c_state_i
 
   // Transition
   if (action) {
-    action(sm);
+    action(sm, event);
   }
 
   // Enter the target branch down to the target
@@ -154,13 +155,14 @@ static void execute_transition(hsm4c_t *sm, hsm4c_state_id_t from, hsm4c_state_i
 }
 
 /** \brief Finds an enabled transition for event in the active branch, deepest state first. */
-static hsm4c_transition_t const *find_transition(hsm4c_t const *sm, hsm4c_event_id_t event,
+static hsm4c_transition_t const *find_transition(hsm4c_t const *sm, hsm4c_event_id_t id,
+                                                 hsm4c_event_t const *event,
                                                  hsm4c_state_id_t *source) {
   hsm4c_state_id_t s = sm->leaf;
   for (;;) {
     hsm4c_transition_t const *t = cfg(sm, s)->transitions;
     for (; t && t->type != HSM4C_TRANSITION_TABLE_END; ++t) {
-      if (t->event == event && (!t->guard_fn || t->guard_fn(sm))) {
+      if (t->event == id && (!t->guard_fn || t->guard_fn(sm, event))) {
         *source = s;
         return t;
       }
@@ -172,14 +174,18 @@ static hsm4c_transition_t const *find_transition(hsm4c_t const *sm, hsm4c_event_
   }
 }
 
-/** \brief Takes the enabled transition for event, if any. Returns true if one was taken. */
-static bool take_transition(hsm4c_t *sm, hsm4c_event_id_t event) {
+/**
+ * \brief Takes the enabled transition for the event ID, if any. event is passed to the callbacks.
+ *
+ * \return true if a transition was taken.
+ */
+static bool take_transition(hsm4c_t *sm, hsm4c_event_id_t id, hsm4c_event_t const *event) {
   hsm4c_state_id_t source = HSM4C_ROOT;
-  hsm4c_transition_t const *const t = find_transition(sm, event, &source);
+  hsm4c_transition_t const *const t = find_transition(sm, id, event, &source);
   if (!t) {
     return false;
   }
-  execute_transition(sm, source, t->to, t->type, t->action_fn);
+  execute_transition(sm, source, t->to, t->type, t->action_fn, event);
   return true;
 }
 
@@ -188,7 +194,7 @@ static bool take_transition(hsm4c_t *sm, hsm4c_event_id_t event) {
  *
  * \return The first requested state change, HSM4C_NO_STATE if none.
  */
-static hsm4c_state_id_t run_states(hsm4c_t *sm, hsm4c_event_id_t event) {
+static hsm4c_state_id_t run_states(hsm4c_t *sm, hsm4c_event_t const *event) {
   hsm4c_state_id_t s = sm->leaf;
   for (;;) {
     if (cfg(sm, s)->run_fn) {
@@ -210,9 +216,9 @@ static hsm4c_state_id_t run_states(hsm4c_t *sm, hsm4c_event_id_t event) {
  * With run_fns, run functions are called whenever no automatic transition is enabled and can
  * request further transitions.
  */
-static void settle(hsm4c_t *sm, hsm4c_event_id_t event, bool run_fns) {
+static void settle(hsm4c_t *sm, hsm4c_event_t const *event, bool run_fns) {
   for (;;) {
-    if (take_transition(sm, HSM4C_NO_EVENT)) {
+    if (take_transition(sm, HSM4C_NO_EVENT, event)) {
       continue;
     }
     if (!run_fns) {
@@ -222,7 +228,7 @@ static void settle(hsm4c_t *sm, hsm4c_event_id_t event, bool run_fns) {
     if (run_target == HSM4C_NO_STATE) {
       return;
     }
-    execute_transition(sm, sm->leaf, run_target, HSM4C_TRANSITION_EXTERNAL, NULL);
+    execute_transition(sm, sm->leaf, run_target, HSM4C_TRANSITION_EXTERNAL, NULL, event);
   }
 }
 
@@ -239,17 +245,20 @@ hsm4c_state_id_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state
 
   enter(sm, HSM4C_ROOT);
   sm->leaf = enter_initial(sm, HSM4C_ROOT);
-  settle(sm, HSM4C_NO_EVENT, false);
+  hsm4c_event_t const no_event = {HSM4C_NO_EVENT, NULL};
+  settle(sm, &no_event, false);
   return sm->leaf;
 }
 
-hsm4c_state_id_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event) {
+hsm4c_state_id_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event, void *data) {
+  hsm4c_event_t const ev = {event, data};
+
   // Event transitions first, automatic transitions afterwards (SCXML macrostep)
   if (event != HSM4C_NO_EVENT) {
-    (void)take_transition(sm, event);
+    (void)take_transition(sm, event, &ev);
   }
 
-  settle(sm, event, true);
+  settle(sm, &ev, true);
 
   return sm->leaf;
 }

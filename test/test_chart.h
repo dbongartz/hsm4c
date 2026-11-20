@@ -63,12 +63,12 @@ extern hsm4c_chart_t const xchart;
 /* State and transition functions. Implemented by the test (fakes). */
 void s_entry(hsm4c_t *sm, hsm4c_state_id_t state);
 void s_exit(hsm4c_t *sm, hsm4c_state_id_t state);
-hsm4c_state_id_t s_run(hsm4c_t *sm, hsm4c_state_id_t state, hsm4c_event_id_t event);
-bool t_guard(hsm4c_t const *sm);
-void t_action(hsm4c_t *sm);
-bool t_choice_A(hsm4c_t const *sm);
-bool t_choice_B(hsm4c_t const *sm);
-bool x_auto(hsm4c_t const *sm);
+hsm4c_state_id_t s_run(hsm4c_t *sm, hsm4c_state_id_t state, hsm4c_event_t const *event);
+bool t_guard(hsm4c_t const *sm, hsm4c_event_t const *event);
+void t_action(hsm4c_t *sm, hsm4c_event_t const *event);
+bool t_choice_A(hsm4c_t const *sm, hsm4c_event_t const *event);
+bool t_choice_B(hsm4c_t const *sm, hsm4c_event_t const *event);
+bool x_auto(hsm4c_t const *sm, hsm4c_event_t const *event);
 
 #ifdef __cplusplus
 }

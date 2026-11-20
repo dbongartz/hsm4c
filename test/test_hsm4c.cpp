@@ -32,6 +32,10 @@ static bool choice_B_return = false;
 static int choice_B_called = 0;
 static bool x_auto_return = false;
 static void *action_ctx = nullptr;
+static hsm4c_event_t guard_event{};
+static hsm4c_event_t action_event{};
+static hsm4c_event_t run_event{};
+static hsm4c_event_t x_auto_event{};
 
 static std::string name(hsm4c_chart_t const &c, int s) { return c.states[s].name; }
 static std::string name(hsm4c_t const *sm, hsm4c_state_id_t s) { return name(*sm->chart, s); }
@@ -39,28 +43,32 @@ static std::string name(hsm4c_t const *sm, hsm4c_state_id_t s) { return name(*sm
 extern "C" {
 void s_entry(hsm4c_t *sm, hsm4c_state_id_t state) { calls.push_back("+" + name(sm, state)); }
 void s_exit(hsm4c_t *sm, hsm4c_state_id_t state) { calls.push_back("-" + name(sm, state)); }
-hsm4c_state_id_t s_run(hsm4c_t *sm, hsm4c_state_id_t state, hsm4c_event_id_t event) {
-  calls.push_back(name(sm, state) + ".run(" + std::to_string(event) + ")");
+hsm4c_state_id_t s_run(hsm4c_t *sm, hsm4c_state_id_t state, hsm4c_event_t const *event) {
+  run_event = *event;
+  calls.push_back(name(sm, state) + ".run(" + std::to_string(event->id) + ")");
   auto it = run_return.find(state);
   return it == run_return.end() ? HSM4C_NO_STATE : it->second;
 }
-bool t_guard(hsm4c_t const * /*sm*/) {
+bool t_guard(hsm4c_t const * /*sm*/, hsm4c_event_t const *event) {
+  guard_event = *event;
   calls.push_back("guard");
   return guard_return;
 }
-void t_action(hsm4c_t *sm) {
+void t_action(hsm4c_t *sm, hsm4c_event_t const *event) {
   action_ctx = hsm4c_ctx(sm);
+  action_event = *event;
   calls.push_back("act");
 }
-bool t_choice_A(hsm4c_t const * /*sm*/) {
+bool t_choice_A(hsm4c_t const * /*sm*/, hsm4c_event_t const * /*event*/) {
   choice_A_called++;
   return choice_A_return;
 }
-bool t_choice_B(hsm4c_t const * /*sm*/) {
+bool t_choice_B(hsm4c_t const * /*sm*/, hsm4c_event_t const * /*event*/) {
   choice_B_called++;
   return choice_B_return;
 }
-bool x_auto(hsm4c_t const * /*sm*/) {
+bool x_auto(hsm4c_t const * /*sm*/, hsm4c_event_t const *event) {
+  x_auto_event = *event;
   calls.push_back("auto");
   return x_auto_return;
 }
@@ -81,13 +89,14 @@ struct Fixture {
     choice_A_called = choice_B_called = 0;
     x_auto_return = false;
     action_ctx = nullptr;
+    guard_event = action_event = run_event = x_auto_event = hsm4c_event_t{};
   }
 
   /** \brief Init the chart and run the given events without recording calls. */
   void prepare(std::vector<hsm4c_event_id_t> const &events = {}) {
     hsm4c_init(&sm, &chart, active, &ctx);
     for (hsm4c_event_id_t e : events) {
-      hsm4c_run(&sm, e);
+      hsm4c_run(&sm, e, nullptr);
     }
     calls.clear();
   }
@@ -95,7 +104,7 @@ struct Fixture {
   /** \brief Run one event and return the recorded calls. */
   Log run(hsm4c_event_id_t e) {
     calls.clear();
-    last = hsm4c_run(&sm, e);
+    last = hsm4c_run(&sm, e, nullptr);
     return calls;
   }
 
@@ -144,6 +153,18 @@ TEST_CASE_FIXTURE(Fixture, "callbacks get the user context") {
   prepare();
   run(EV_1);
   CHECK(action_ctx == &ctx);
+}
+
+TEST_CASE_FIXTURE(Fixture, "callbacks get the event and its data") {
+  prepare();
+  int payload = 0;
+  hsm4c_run(&sm, EV_1, &payload);
+  CHECK(guard_event.id == EV_1);
+  CHECK(guard_event.data == &payload);
+  CHECK(action_event.id == EV_1);
+  CHECK(action_event.data == &payload);
+  CHECK(run_event.id == EV_1);
+  CHECK(run_event.data == &payload);
 }
 
 TEST_CASE_FIXTURE(Fixture, "B to A") {
@@ -280,7 +301,7 @@ struct XFixture : Fixture {
 
   Log xrun(hsm4c_event_id_t e) {
     calls.clear();
-    last = hsm4c_run(&sm, e);
+    last = hsm4c_run(&sm, e, nullptr);
     return calls;
   }
 };
@@ -290,6 +311,21 @@ TEST_CASE_FIXTURE(XFixture, "init takes automatic transitions") {
   CHECK(hsm4c_init(&sm, &xchart, xactive, &ctx) == XR);
   // No run functions on init
   CHECK(calls == Log{"+XROOT", "+XP", "+XPA", "auto", "-XPA", "-XP", "+XR"});
+}
+
+TEST_CASE_FIXTURE(XFixture, "automatic transitions get no event during init") {
+  hsm4c_init(&sm, &xchart, xactive, &ctx);
+  CHECK(x_auto_event.id == HSM4C_NO_EVENT);
+  CHECK(x_auto_event.data == nullptr);
+}
+
+TEST_CASE_FIXTURE(XFixture, "automatic transitions get the processed event") {
+  xprepare();
+  x_auto_return = true;
+  int payload = 0;
+  CHECK(hsm4c_run(&sm, EV_4, &payload) == XR);
+  CHECK(x_auto_event.id == EV_4);
+  CHECK(x_auto_event.data == &payload);
 }
 
 TEST_CASE_FIXTURE(XFixture, "event transitions take priority over automatic transitions") {
