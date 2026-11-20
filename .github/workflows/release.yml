@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check tag matches project version
+        id: version
+        run: |
+          version=$(grep -oP '^\s*VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match project version $version in CMakeLists.txt"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Create source archive
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git archive --format=tar.gz --prefix="hsm4c-$VERSION/" -o "hsm4c-$VERSION.tar.gz" HEAD
+          sha256sum "hsm4c-$VERSION.tar.gz" > "hsm4c-$VERSION.tar.gz.sha256"
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes \
+            "hsm4c-$VERSION.tar.gz" "hsm4c-$VERSION.tar.gz.sha256"

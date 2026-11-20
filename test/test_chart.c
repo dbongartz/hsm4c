@@ -1,6 +1,6 @@
 #include "test_chart.h"
 
-State states[_NUM_STATES];
+State states[NUM_STATES];
 
 static Transition const transitions_a[] = {
     {&states[A], &states[B], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
@@ -44,7 +44,7 @@ static Transition const transitions_a_choice[] = {
     SC_TRANSITIONS_END,
 };
 
-static StateConfig const statecfgs[_NUM_STATES] = {
+static StateConfig const statecfgs[NUM_STATES] = {
     [ROOT] =
         {
             .name = "ROOT",
@@ -181,11 +181,12 @@ static StateConfig const statecfgs[_NUM_STATES] = {
         },
 };
 
-State xstates[_NUM_XSTATES];
+State xstates[NUM_XSTATES];
 
 static Transition const transitions_xroot[] = {
     {&xstates[XP], &xstates[XQ], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
     {&xstates[XPA], &xstates[XPB], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&xstates[XROOT], &xstates[XQ], EV_5, t_action, t_guard, SC_TTYPE_EXTERNAL},
     SC_TRANSITIONS_END,
 };
 static Transition const transitions_xpa[] = {
@@ -195,8 +196,9 @@ static Transition const transitions_xpa[] = {
     SC_TRANSITIONS_END,
 };
 
-#define XSTATE(n, ...) {.name = n, .entry_fn = s_entry, .exit_fn = s_exit, .run_fn = s_run, __VA_ARGS__}
-static StateConfig const xstatecfgs[_NUM_XSTATES] = {
+#define XSTATE(n, ...)                                                                             \
+  { .name = n, .entry_fn = s_entry, .exit_fn = s_exit, .run_fn = s_run, __VA_ARGS__ }
+static StateConfig const xstatecfgs[NUM_XSTATES] = {
     [XROOT] = XSTATE("XROOT", .initial = &xstates[XP], .type = SC_TYPE_ROOT,
                      .transitions = transitions_xroot),
     [XP] = XSTATE("XP", .parent = &xstates[XROOT], .initial = &xstates[XPA]),
@@ -207,12 +209,12 @@ static StateConfig const xstatecfgs[_NUM_XSTATES] = {
 };
 
 void chart_reset(void) {
-  sc_map_stateconfig_to_states(_NUM_STATES, states, statecfgs);
-  for (size_t i = 0; i < _NUM_STATES; ++i) {
+  sc_map_stateconfig_to_states(NUM_STATES, states, statecfgs);
+  for (size_t i = 0; i < NUM_STATES; ++i) {
     sc_reset_state(&states[i]);
   }
-  sc_map_stateconfig_to_states(_NUM_XSTATES, xstates, xstatecfgs);
-  for (size_t i = 0; i < _NUM_XSTATES; ++i) {
+  sc_map_stateconfig_to_states(NUM_XSTATES, xstates, xstatecfgs);
+  for (size_t i = 0; i < NUM_XSTATES; ++i) {
     sc_reset_state(&xstates[i]);
   }
 }

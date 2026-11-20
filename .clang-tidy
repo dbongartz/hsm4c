@@ -1,0 +1,26 @@
+# Moderate set: bug finding, performance, portability and selected readability checks.
+Checks: >
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  performance-*,
+  portability-*,
+  readability-avoid-const-params-in-decls,
+  readability-braces-around-statements,
+  readability-duplicate-include,
+  readability-else-after-return,
+  readability-inconsistent-declaration-parameter-name,
+  readability-isolate-declaration,
+  readability-misleading-indentation,
+  readability-misplaced-array-index,
+  readability-named-parameter,
+  readability-non-const-parameter,
+  readability-redundant-*,
+  readability-simplify-boolean-expr,
+  -bugprone-easily-swappable-parameters,
+  -performance-enum-size,
+  -clang-analyzer-optin.performance.Padding,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
+WarningsAsErrors: "*"
+HeaderFilterRegex: "/(src|test|examples)/"
+FormatStyle: file

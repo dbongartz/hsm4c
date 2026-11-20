@@ -18,7 +18,7 @@
  * | SC_NO_EVENT transition        | completion transition | event-less transition           |
  * | SC_TYPE_CHOICE                | choice                | state with event-less transitions |
  * | SC_TYPE_HISTORY(_DEEP)        | (deep) history        | history type="shallow"/"deep"   |
- * | run_fn                        | do activity (approx.) | -                               |
+ * | run_fn (sc_run_fn)            | do activity (approx.) | -                               |
  *
  * Supports:
  *
@@ -31,7 +31,7 @@
  * - Initial child states.
  * - History and deep history pseudo states with an optional initial state.
  * - Choice pseudo states.
- * - Relatively easy table-based syntax (see test/test_chart.c).
+ * - Relatively easy table-based syntax (see examples/hsm4c_demo.c).
  *
  * Does not support:
  * - Parallel (orthogonal) states.
@@ -49,9 +49,13 @@
 extern "C" {
 #endif
 
+/** \brief State. See struct State. */
 typedef struct State State;
+/** \brief Constant state configuration. See struct StateConfig. */
 typedef struct StateConfig StateConfig;
+/** \brief Transition table row. See struct Transition. */
 typedef struct Transition Transition;
+/** \brief Event identifier. User events must be > 0, see ScEvents. */
 typedef int EventType;
 
 /** \brief State Types */
@@ -147,7 +151,7 @@ typedef enum ScEvents {
  *
  * \param s   State being entered.
  */
-typedef void (*entry_fn)(State const *s);
+typedef void (*sc_entry_fn)(State const *s);
 
 /**
  * \brief Run function prototype.
@@ -164,21 +168,21 @@ typedef void (*entry_fn)(State const *s);
  * \attention Transitions triggered by run functions are not visible in the transition
  *            tables. Be careful with this.
  */
-typedef State *(*run_fn)(State const *s, EventType e);
+typedef State *(*sc_run_fn)(State const *s, EventType e);
 
 /**
  * \brief Exit function prototype.
  *
  * \param s   State being exited.
  */
-typedef void (*exit_fn)(State const *s);
+typedef void (*sc_exit_fn)(State const *s);
 
 /**
  * \brief Transition action prototype.
  *
  * \param root  Root state.
  */
-typedef void (*transition_fn)(State const *root);
+typedef void (*sc_transition_fn)(State const *root);
 
 /**
  * \brief Guard prototype.
@@ -187,7 +191,7 @@ typedef void (*transition_fn)(State const *root);
  *
  * \return      true if the transition should be taken, false otherwise.
  */
-typedef bool (*guard_fn)(State const *root);
+typedef bool (*sc_guard_fn)(State const *root);
 
 /** \brief Transition. Use designated or positional initializers in transition tables. */
 struct Transition {
@@ -207,26 +211,27 @@ struct Transition {
   /** \brief Event the transition reacts to. Must be positive or SC_NO_EVENT. */
   EventType const event;
   /** \brief Transition action. Called after all exits, before all entries. (optional) */
-  transition_fn const transition_fn;
+  sc_transition_fn const transition_fn;
   /** \brief Guard. Called when source and event match. NULL means always true. (optional) */
-  guard_fn const guard_fn;
+  sc_guard_fn const guard_fn;
   /** \brief Transition type. Default: SC_TTYPE_EXTERNAL. */
   TransitionType type;
 };
 
-/** \brief Use this to indicate the end of the transition table. */
-#define SC_TRANSITIONS_END ((Transition const){.type = SC_TTYPE_TABLE_END})
+/** \brief Use this as last element of a transition table. */
+#define SC_TRANSITIONS_END                                                                         \
+  { .type = SC_TTYPE_TABLE_END }
 
 /** \brief Constant state configuration. */
 struct StateConfig {
   /** \brief Name of the state. Not used by the library. (optional) */
   char const *name;
   /** \brief Entry function. Called after the exits and the transition action. (optional) */
-  entry_fn const entry_fn;
-  /** \brief Run function. Can trigger a transition. See run_fn. (optional) */
-  run_fn const run_fn;
+  sc_entry_fn const entry_fn;
+  /** \brief Run function. Can trigger a transition. See sc_run_fn. (optional) */
+  sc_run_fn const run_fn;
   /** \brief Exit function. Called after the guard, before the transition action. (optional) */
-  exit_fn const exit_fn;
+  sc_exit_fn const exit_fn;
   /** \brief Parent state. NULL only for the root state. (mandatory) */
   State *const parent;
   /**

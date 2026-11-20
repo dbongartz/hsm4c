@@ -6,7 +6,7 @@
  * MIT License
  */
 
-#include "hsm4c.h"
+#include "hsm4c/hsm4c.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -44,7 +44,7 @@ static void walk_up_set_active_state(State *start, State const *end_ancestor) {
 }
 
 /** \brief Walks down a branch from start to end_child and calls entry_fn(). */
-static void walk_down_entry(State const * const start, State const * const end_child) {
+static void walk_down_entry(State const *const start, State const *const end_child) {
   if (!end_child || !start) {
     return;
   }
@@ -84,8 +84,8 @@ static State *find_root(State const *start) {
 }
 
 /** \brief Finds the first enabled transition with source s and the given event in a table. */
-static Transition const *match_table(Transition const *table, State const *s,
-                                     State const *root, EventType event) {
+static Transition const *match_table(Transition const *table, State const *s, State const *root,
+                                     EventType event) {
   if (!table) {
     return NULL;
   }
@@ -195,7 +195,7 @@ static bool is_descendant(State const *s, State const *ancestor) {
 
 /** \brief Executes a single transition from the active leaf. */
 static void execute_transition(State *root, State *from, State *to, TransitionType type,
-                               transition_fn action) {
+                               sc_transition_fn action) {
   // Handle StateType
   State *target_state = to ? get_target_state_from_type(to) : NULL;
 
@@ -212,6 +212,11 @@ static void execute_transition(State *root, State *from, State *to, TransitionTy
   State *domain = (type == SC_TTYPE_LOCAL && is_descendant(target_state, from))
                       ? from
                       : fca(from, target_state);
+
+  // The root is never exited, e.g. for transitions with the root as source
+  if (!domain) {
+    domain = root;
+  }
 
   State *from_leaf = root->_active;
 

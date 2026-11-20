@@ -1,19 +1,35 @@
-cmake_minimum_required(VERSION 3.14)
-project(hsm4c VERSION 0.1.0 LANGUAGES C CXX)
+cmake_minimum_required(VERSION 3.28)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE INTERNAL "")
+project(
+  hsm4c
+  VERSION 0.1.0
+  DESCRIPTION "Hierarchical state machine (statechart) library in C"
+  HOMEPAGE_URL "https://github.com/dbongartz/hsm4c"
+  LANGUAGES C)
 
-add_compile_options(-Wall -Wextra)
+option(HSM4C_BUILD_TESTS "Build the hsm4c tests" ${PROJECT_IS_TOP_LEVEL})
+option(HSM4C_BUILD_EXAMPLES "Build the hsm4c examples" ${PROJECT_IS_TOP_LEVEL})
+option(HSM4C_BUILD_DOCS "Build the hsm4c API documentation (requires Doxygen)" OFF)
+option(HSM4C_INSTALL "Generate the hsm4c install rules" ${PROJECT_IS_TOP_LEVEL})
 
-include(CTest)
+include(cmake/hsm4cWarnings.cmake)
 
-add_subdirectory(lib)
 add_subdirectory(src)
 
-if(BUILD_TESTING)
+if(HSM4C_BUILD_TESTS)
+  enable_language(CXX)
+  enable_testing()
   add_subdirectory(test)
 endif()
 
-set(CPACK_PROJECT_NAME ${PROJECT_NAME})
-set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
-include(CPack)
+if(HSM4C_BUILD_EXAMPLES)
+  add_subdirectory(examples)
+endif()
+
+if(HSM4C_BUILD_DOCS)
+  add_subdirectory(docs)
+endif()
+
+if(HSM4C_INSTALL)
+  include(cmake/hsm4cInstall.cmake)
+endif()

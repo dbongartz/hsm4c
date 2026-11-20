@@ -11,7 +11,7 @@
  */
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-#include "doctest.h"
+#include <doctest/doctest.h>
 
 #include "test_chart.h"
 
@@ -42,20 +42,20 @@ State *s_run(State const *s, EventType event) {
   auto it = run_return.find(s);
   return it == run_return.end() ? nullptr : it->second;
 }
-bool t_guard(State const *) {
+bool t_guard(State const * /*root*/) {
   calls.push_back("guard");
   return guard_return;
 }
-void t_action(State const *) { calls.push_back("act"); }
-bool t_choice_A(State const *) {
+void t_action(State const * /*root*/) { calls.push_back("act"); }
+bool t_choice_A(State const * /*root*/) {
   choice_A_called++;
   return choice_A_return;
 }
-bool t_choice_B(State const *) {
+bool t_choice_B(State const * /*root*/) {
   choice_B_called++;
   return choice_B_return;
 }
-bool x_auto(State const *) {
+bool x_auto(State const * /*root*/) {
   calls.push_back("auto");
   return x_auto_return;
 }
@@ -126,20 +126,20 @@ TEST_CASE_FIXTURE(Fixture, "initial") {
 
 TEST_CASE_FIXTURE(Fixture, "A to B") {
   prepare();
-  CHECK(run(EV_1) == Log{"guard", "-AAA", "-AA", "-A", "act", "+B", "+BA"} +
-                         runs({BA, B, ROOT}, EV_1));
+  CHECK(run(EV_1) ==
+        Log{"guard", "-AAA", "-AA", "-A", "act", "+B", "+BA"} + runs({BA, B, ROOT}, EV_1));
 }
 
 TEST_CASE_FIXTURE(Fixture, "B to A") {
   prepare({EV_1});
-  CHECK(run(EV_1) == Log{"guard", "-BA", "-B", "act", "+A", "+AA", "+AAA"} +
-                         runs({AAA, AA, A, ROOT}, EV_1));
+  CHECK(run(EV_1) ==
+        Log{"guard", "-BA", "-B", "act", "+A", "+AA", "+AAA"} + runs({AAA, AA, A, ROOT}, EV_1));
 }
 
 TEST_CASE_FIXTURE(Fixture, "A to BB") {
   prepare({EV_1, EV_1});
-  CHECK(run(EV_2) == Log{"guard", "-AAA", "-AA", "-A", "act", "+B", "+BB"} +
-                         runs({BB, B, ROOT}, EV_2));
+  CHECK(run(EV_2) ==
+        Log{"guard", "-AAA", "-AA", "-A", "act", "+B", "+BB"} + runs({BB, B, ROOT}, EV_2));
 }
 
 TEST_CASE_FIXTURE(Fixture, "AA to AB") {
@@ -163,15 +163,15 @@ TEST_CASE_FIXTURE(Fixture, "AAA to AAB") {
 TEST_CASE_FIXTURE(Fixture, "AAA to AAB to B to A history") {
   // AAB, then B with A->AA->AAB history. Shallow history resets AA, expecting AAA.
   prepare({EV_4, EV_4});
-  CHECK(run(EV_4) == Log{"guard", "-BA", "-B", "act", "+A", "+AA", "+AAA"} +
-                         runs({AAA, AA, A, ROOT}, EV_4));
+  CHECK(run(EV_4) ==
+        Log{"guard", "-BA", "-B", "act", "+A", "+AA", "+AAA"} + runs({AAA, AA, A, ROOT}, EV_4));
 }
 
 TEST_CASE_FIXTURE(Fixture, "AAA to AAB to B to A deep history") {
   // AAB, then B with A->AA->AAB deep history. Expecting AAB.
   prepare({EV_4, EV_4});
-  CHECK(run(EV_5) == Log{"guard", "-BA", "-B", "act", "+A", "+AA", "+AAB"} +
-                         runs({AAB, AA, A, ROOT}, EV_5));
+  CHECK(run(EV_5) ==
+        Log{"guard", "-BA", "-B", "act", "+A", "+AA", "+AAB"} + runs({AAB, AA, A, ROOT}, EV_5));
 }
 
 // All choice guards false: waits in the choice state and re-evaluates on the next sc_run().
@@ -199,8 +199,8 @@ TEST_CASE_FIXTURE(Fixture, "A to B via choice immediately") {
 
 TEST_CASE_FIXTURE(Fixture, "A to B history with no history set") {
   prepare();
-  CHECK(run(EV_7) == Log{"guard", "-AAA", "-AA", "-A", "act", "+B", "+BC"} +
-                         runs({BC, B, ROOT}, EV_7));
+  CHECK(run(EV_7) ==
+        Log{"guard", "-AAA", "-AA", "-A", "act", "+B", "+BC"} + runs({BC, B, ROOT}, EV_7));
 }
 
 TEST_CASE_FIXTURE(Fixture, "AAA to AAA external") {
@@ -210,8 +210,8 @@ TEST_CASE_FIXTURE(Fixture, "AAA to AAA external") {
 
 TEST_CASE_FIXTURE(Fixture, "AA to AAB external") {
   prepare();
-  CHECK(run(EV_9) == Log{"guard", "-AAA", "-AA", "act", "+AA", "+AAB"} +
-                         runs({AAB, AA, A, ROOT}, EV_9));
+  CHECK(run(EV_9) ==
+        Log{"guard", "-AAA", "-AA", "act", "+AA", "+AAB"} + runs({AAB, AA, A, ROOT}, EV_9));
 }
 
 TEST_CASE_FIXTURE(Fixture, "AA to AAB local") {
@@ -222,8 +222,8 @@ TEST_CASE_FIXTURE(Fixture, "AA to AAB local") {
 TEST_CASE_FIXTURE(Fixture, "AAB to AA local behaves as external") {
   prepare({EV_10});
   // Local only applies when the target is a descendant of the source (SCXML type="internal").
-  CHECK(run(EV_12) == Log{"guard", "-AAB", "-AA", "act", "+AA", "+AAA"} +
-                          runs({AAA, AA, A, ROOT}, EV_12));
+  CHECK(run(EV_12) ==
+        Log{"guard", "-AAB", "-AA", "act", "+AA", "+AAA"} + runs({AAA, AA, A, ROOT}, EV_12));
 }
 
 TEST_CASE_FIXTURE(Fixture, "AAA to AAA internal") {
@@ -299,6 +299,11 @@ TEST_CASE_FIXTURE(XFixture, "targetless transition only executes its action") {
   xprepare();
   CHECK(xrun(EV_3) == Log{"guard", "act", "auto"} + xruns({XPA, XP, XROOT}, EV_3));
   CHECK(last == &xstates[XPA]);
+}
+
+TEST_CASE_FIXTURE(XFixture, "transition with root as source does not exit the root") {
+  xprepare();
+  CHECK(xrun(EV_5) == Log{"guard", "-XPA", "-XP", "act", "+XQ"} + xruns({XQ, XROOT}, EV_5));
 }
 
 /*
