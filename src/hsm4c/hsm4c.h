@@ -39,7 +39,15 @@
  * - Relatively easy table-based syntax (see examples/hsm4c_demo.c).
  *
  * Does not support:
- * - Parallel (orthogonal) states.
+ * - Parallel (orthogonal) states and final states.
+ *
+ * Differences to SCXML besides those:
+ * - A state without an initial state is a leaf. SCXML enters its first child by default.
+ * - Events are integers matched exactly. SCXML matches event name prefixes and "*".
+ * - Initial and history default transitions have no actions.
+ *
+ * Conformance is tested with charts ported from the W3C SCXML IRP test suite
+ * (test/scxml_charts.c).
  *
  * (C) 2023 David Bongartz
  * MIT License
