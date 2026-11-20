@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.28)
 project(hsm4c_examples LANGUAGES C)
 
 if(NOT TARGET hsm4c::hsm4c)
-  find_package(hsm4c 0.2 REQUIRED)
+  find_package(hsm4c 0.3 REQUIRED)
 endif()
 
 add_executable(hsm4c_demo hsm4c_demo.c)
