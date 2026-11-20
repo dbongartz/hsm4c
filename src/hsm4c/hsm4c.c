@@ -228,9 +228,11 @@ static void settle(hsm4c_t *sm, hsm4c_event_id_t event, bool run_fns) {
 
 /* -------- Public -------- */
 
-hsm4c_state_id_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_id_t *active) {
+hsm4c_state_id_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_id_t *active,
+                            void *ctx) {
   sm->chart = chart;
   sm->active = active;
+  sm->ctx = ctx;
   for (hsm4c_state_id_t i = 0; i < chart->num_states; ++i) {
     active[i] = HSM4C_NO_STATE;
   }
@@ -251,6 +253,8 @@ hsm4c_state_id_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event) {
 
   return sm->leaf;
 }
+
+void *hsm4c_ctx(hsm4c_t const *sm) { return sm->ctx; }
 
 hsm4c_state_id_t hsm4c_current(hsm4c_t const *sm) { return sm->leaf; }
 

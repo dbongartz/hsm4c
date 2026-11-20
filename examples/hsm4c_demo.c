@@ -61,11 +61,16 @@ static bool guard(hsm4c_t const *sm) {
   return true;
 }
 
+/** \brief Application data, reached from callbacks via hsm4c_ctx(). */
+struct app {
+  int condition_calls;
+};
+
 /** \brief False on the first call, true afterwards. */
 static bool condition(hsm4c_t const *sm) {
-  static int counter = 0;
-  printf("  condition (in %s): call %d\n", state_name(hsm4c_current(sm)), counter);
-  return counter++ >= 1;
+  struct app *const app = hsm4c_ctx(sm);
+  printf("  condition (in %s): call %d\n", state_name(hsm4c_current(sm)), app->condition_calls);
+  return app->condition_calls++ >= 1;
 }
 
 /* -------- Statechart -------- */
@@ -166,11 +171,12 @@ int main(void) {
   printf("sizeof(hsm4c_state_t): %zu, sizeof(hsm4c_transition_t): %zu\n\n", sizeof(hsm4c_state_t),
          sizeof(hsm4c_transition_t));
 
+  struct app app = {0};
   hsm4c_t sm;
   hsm4c_state_id_t active[NUM_STATES];
 
   printf("hsm4c_init()\n");
-  hsm4c_state_id_t current = hsm4c_init(&sm, &my_chart, active);
+  hsm4c_state_id_t current = hsm4c_init(&sm, &my_chart, active, &app);
   printf("-> %s\n\n", state_name(current));
 
   for (size_t i = 0; i < sizeof(steps) / sizeof(steps[0]); ++i) {

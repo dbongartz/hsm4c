@@ -31,6 +31,7 @@ static int choice_A_called = 0;
 static bool choice_B_return = false;
 static int choice_B_called = 0;
 static bool x_auto_return = false;
+static void *action_ctx = nullptr;
 
 static std::string name(hsm4c_chart_t const &c, int s) { return c.states[s].name; }
 static std::string name(hsm4c_t const *sm, hsm4c_state_id_t s) { return name(*sm->chart, s); }
@@ -47,7 +48,10 @@ bool t_guard(hsm4c_t const * /*sm*/) {
   calls.push_back("guard");
   return guard_return;
 }
-void t_action(hsm4c_t * /*sm*/) { calls.push_back("act"); }
+void t_action(hsm4c_t *sm) {
+  action_ctx = hsm4c_ctx(sm);
+  calls.push_back("act");
+}
 bool t_choice_A(hsm4c_t const * /*sm*/) {
   choice_A_called++;
   return choice_A_return;
@@ -67,6 +71,7 @@ bool x_auto(hsm4c_t const * /*sm*/) {
 struct Fixture {
   hsm4c_t sm{};
   hsm4c_state_id_t active[NUM_STATES]{};
+  int ctx = 0;
 
   Fixture() {
     calls.clear();
@@ -75,11 +80,12 @@ struct Fixture {
     choice_A_return = choice_B_return = false;
     choice_A_called = choice_B_called = 0;
     x_auto_return = false;
+    action_ctx = nullptr;
   }
 
   /** \brief Init the chart and run the given events without recording calls. */
   void prepare(std::vector<hsm4c_event_id_t> const &events = {}) {
-    hsm4c_init(&sm, &chart, active);
+    hsm4c_init(&sm, &chart, active, &ctx);
     for (hsm4c_event_id_t e : events) {
       hsm4c_run(&sm, e);
     }
@@ -119,12 +125,12 @@ static Log operator+(Log a, Log const &b) {
 /* -------- TESTS -------- */
 
 TEST_CASE_FIXTURE(Fixture, "initial") {
-  hsm4c_init(&sm, &chart, active);
+  hsm4c_init(&sm, &chart, active, &ctx);
   CHECK(calls == Log{"+ROOT", "+A", "+AA", "+AAA"});
 
   // Double init to check if it resets accordingly
   calls.clear();
-  hsm4c_init(&sm, &chart, active);
+  hsm4c_init(&sm, &chart, active, &ctx);
   CHECK(calls == Log{"+ROOT", "+A", "+AA", "+AAA"});
 }
 
@@ -132,6 +138,12 @@ TEST_CASE_FIXTURE(Fixture, "A to B") {
   prepare();
   CHECK(run(EV_1) ==
         Log{"guard", "-AAA", "-AA", "-A", "act", "+B", "+BA"} + runs({BA, B, ROOT}, EV_1));
+}
+
+TEST_CASE_FIXTURE(Fixture, "callbacks get the user context") {
+  prepare();
+  run(EV_1);
+  CHECK(action_ctx == &ctx);
 }
 
 TEST_CASE_FIXTURE(Fixture, "B to A") {
@@ -262,7 +274,7 @@ struct XFixture : Fixture {
   hsm4c_state_id_t xactive[NUM_XSTATES]{};
 
   void xprepare() {
-    hsm4c_init(&sm, &xchart, xactive);
+    hsm4c_init(&sm, &xchart, xactive, &ctx);
     calls.clear();
   }
 
@@ -275,7 +287,7 @@ struct XFixture : Fixture {
 
 TEST_CASE_FIXTURE(XFixture, "init takes automatic transitions") {
   x_auto_return = true;
-  CHECK(hsm4c_init(&sm, &xchart, xactive) == XR);
+  CHECK(hsm4c_init(&sm, &xchart, xactive, &ctx) == XR);
   // No run functions on init
   CHECK(calls == Log{"+XROOT", "+XP", "+XPA", "auto", "-XPA", "-XP", "+XR"});
 }

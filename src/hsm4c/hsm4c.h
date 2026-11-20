@@ -288,6 +288,8 @@ struct hsm4c {
   hsm4c_state_id_t *active;
   /** \brief Private. Active leaf state. */
   hsm4c_state_id_t leaf;
+  /** \brief Private. User context, see hsm4c_ctx(). */
+  void *ctx;
 };
 
 /**
@@ -300,10 +302,12 @@ struct hsm4c {
  * \param sm      Machine to initialize.
  * \param chart   Chart to run. Must outlive the machine.
  * \param active  Runtime storage of `chart->num_states` elements. Must outlive the machine.
+ * \param ctx     User context for the callbacks, see hsm4c_ctx(). Can be NULL.
  *
  * \return        Active leaf state after init.
  */
-hsm4c_state_id_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_id_t *active);
+hsm4c_state_id_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_id_t *active,
+                            void *ctx);
 
 /**
  * \brief Processes one event.
@@ -318,6 +322,17 @@ hsm4c_state_id_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state
  * \return        Active leaf state after processing.
  */
 hsm4c_state_id_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event);
+
+/**
+ * \brief Gets the user context given to hsm4c_init().
+ *
+ * Use it in callbacks to reach application data.
+ *
+ * \param sm      Machine.
+ *
+ * \return        User context.
+ */
+void *hsm4c_ctx(hsm4c_t const *sm);
 
 /**
  * \brief Gets the active leaf state.
