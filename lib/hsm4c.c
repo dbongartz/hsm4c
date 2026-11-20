@@ -83,36 +83,36 @@ static State *find_root(State const *start) {
   return (State *)root;
 }
 
-/** \brief Finds a valid (matching or automatic) transition in the active branch. */
-static Transition const *find_transition(State const *const root, EventType event) {
-  Transition const *transitions = root->config->transitions;
-
-  for (State const *s = root->_active; s != NULL; s = s->config->parent) {
-    if (!s->config->transitions) {
-      continue;
-    }
-    transitions = s->config->transitions;
-    for (Transition const *t = transitions; t->type != SC_TTYPE_TABLE_END; ++t) {
-      if (t->event == event || t->event == SC_NO_EVENT) {
-        if (transitions != root->config->transitions) {
-          if (!t->guard_fn || (t->guard_fn && t->guard_fn(root))) {
-            return t;
-          }
-        } else {
-          // Search from current state to root. TODO: Only needed when table is not sourced by state
-          for (State const *parent = root->_active; parent != NULL;
-               parent = parent->config->parent) {
-            if (t->from == parent) {
-              if (!t->guard_fn || (t->guard_fn && t->guard_fn(root))) {
-                return t;
-              }
-            }
-          }
-        }
-      }
+/** \brief Finds the first enabled transition with source s and the given event in a table. */
+static Transition const *match_table(Transition const *table, State const *s,
+                                     State const *root, EventType event) {
+  if (!table) {
+    return NULL;
+  }
+  for (Transition const *t = table; t->type != SC_TTYPE_TABLE_END; ++t) {
+    if (t->from == s && t->event == event && (!t->guard_fn || t->guard_fn(root))) {
+      return t;
     }
   }
+  return NULL;
+}
 
+/**
+ * \brief Finds an enabled transition for event in the active branch.
+ *
+ * States are searched from the active leaf up to the root, so deeper states take priority.
+ * For each state its own table is searched first, then the root's table.
+ */
+static Transition const *find_transition(State const *const root, EventType event) {
+  for (State const *s = root->_active; s != NULL; s = s->config->parent) {
+    Transition const *t = match_table(s->config->transitions, s, root, event);
+    if (!t && s != root) {
+      t = match_table(root->config->transitions, s, root, event);
+    }
+    if (t) {
+      return t;
+    }
+  }
   return NULL;
 }
 
@@ -183,45 +183,51 @@ static State *get_target_state_from_type(State *to) {
   return target_state;
 }
 
+/** \brief Returns true if s is a proper descendant of ancestor. */
+static bool is_descendant(State const *s, State const *ancestor) {
+  for (s = s->config->parent; s != NULL; s = s->config->parent) {
+    if (s == ancestor) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** \brief Executes a single transition from the active leaf. */
-static void execute_transition(State *root, State const *from, State *to, TransitionType type,
+static void execute_transition(State *root, State *from, State *to, TransitionType type,
                                transition_fn action) {
   // Handle StateType
-  State *target_state = get_target_state_from_type(to);
+  State *target_state = to ? get_target_state_from_type(to) : NULL;
 
-  // Internal transition (local, same -> same): no exit/entry, configuration unchanged.
-  if (type == SC_TTYPE_LOCAL && from == target_state) {
+  // Targetless or local "Same -> Same": internal transition. No exit/entry, nothing changes.
+  if (!target_state || (type == SC_TTYPE_LOCAL && from == target_state)) {
     if (action) {
       action(root);
     }
     return;
   }
 
-  // Find common ancestor of source and target
-  State *ca = fca(from, target_state);
+  // Transition domain: A local transition into a descendant does not exit its source.
+  // Otherwise (also local with any other target) the common ancestor of source and target.
+  State *domain = (type == SC_TTYPE_LOCAL && is_descendant(target_state, from))
+                      ? from
+                      : fca(from, target_state);
 
   State *from_leaf = root->_active;
 
   // Set target branch active states to reach target
-  walk_up_set_active_state(target_state, ca);
+  walk_up_set_active_state(target_state, domain);
 
-  // Local transitions do not exit the containing state
-  if (type == SC_TTYPE_LOCAL) {
-    ca = ca->_active;
-  }
-
-  // Exit all states on the active branch until ancestor
-  walk_up_exit(from_leaf, ca);
+  // Exit all states on the active branch below the domain
+  walk_up_exit(from_leaf, domain);
 
   // Transition
   if (action) {
     action(root);
   }
 
-  // Enter target branch incl. target (target not re-entered if it is the local container)
-  if (ca != target_state) {
-    walk_down_entry(ca->_active, target_state);
-  }
+  // Enter target branch incl. target
+  walk_down_entry(domain->_active, target_state);
 
   // The target might not be initialized yet
   State *leaf = walk_down_init(target_state);
@@ -231,11 +237,41 @@ static void execute_transition(State *root, State const *from, State *to, Transi
   root->_active = leaf;
 }
 
+/** \brief Executes a transition table row. */
+static void take_transition(State *root, Transition const *t) {
+  execute_transition(root, t->from, t->to, t->type, t->transition_fn);
+}
+
+/**
+ * \brief Takes automatic transitions until none is enabled.
+ *
+ * With run_fns, run functions are called whenever no automatic transition is enabled and can
+ * request further transitions.
+ */
+static void settle(State *root, EventType event, bool run_fns) {
+  for (;;) {
+    Transition const *t = find_transition(root, SC_NO_EVENT);
+    if (t) {
+      take_transition(root, t);
+      continue;
+    }
+    if (!run_fns) {
+      return;
+    }
+    State *run_target = ancestors_run(root, event);
+    if (!run_target) {
+      return;
+    }
+    execute_transition(root, root->_active, run_target, SC_TTYPE_EXTERNAL, NULL);
+  }
+}
+
 /* -------- Public -------- */
 
 State const *sc_init(State *root) {
   root->_active = walk_down_init(root);
   walk_down_entry(root, root->_active);
+  settle(root, SC_NO_EVENT, false);
   return root->_active;
 }
 
@@ -251,22 +287,13 @@ void sc_reset_state(State *state) { state->_active = NULL; }
 State const *sc_get_root(State const *s) { return find_root(s); }
 
 State const *sc_run(State *root, EventType event) {
-  Transition const *t = find_transition(root, event);
-  State *run_target = t ? NULL : ancestors_run(root, event);
-
-  while (t || run_target) {
-    if (t) {
-      execute_transition(root, t->from, t->to, t->type, t->transition_fn);
-    } else {
-      execute_transition(root, root->_active, run_target, SC_TTYPE_EXTERNAL, NULL);
-    }
-
-    // Check automatic transitions of the new active branch
-    t = find_transition(root, SC_NO_EVENT);
-
-    // Run all run functions of the active branch, continue if a change is requested
-    run_target = t ? NULL : ancestors_run(root, event);
+  // Event transitions first, automatic transitions afterwards (SCXML macrostep)
+  Transition const *t = event != SC_NO_EVENT ? find_transition(root, event) : NULL;
+  if (t) {
+    take_transition(root, t);
   }
+
+  settle(root, event, true);
 
   return root->_active;
 }

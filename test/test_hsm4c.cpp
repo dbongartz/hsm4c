@@ -30,6 +30,7 @@ static bool choice_A_return = false;
 static int choice_A_called = 0;
 static bool choice_B_return = false;
 static int choice_B_called = 0;
+static bool x_auto_return = false;
 
 static std::string name(State const *s) { return s->config->name; }
 
@@ -54,6 +55,10 @@ bool t_choice_B(State const *) {
   choice_B_called++;
   return choice_B_return;
 }
+bool x_auto(State const *) {
+  calls.push_back("auto");
+  return x_auto_return;
+}
 }
 
 /* -------- FIXTURE -------- */
@@ -68,6 +73,7 @@ struct Fixture {
     run_return.clear();
     choice_A_return = choice_B_return = false;
     choice_A_called = choice_B_called = 0;
+    x_auto_return = false;
   }
 
   /** \brief Init the chart and run the given events without recording calls. */
@@ -90,13 +96,16 @@ struct Fixture {
 };
 
 /** \brief Expected run calls for a branch, leaf first. */
-static Log runs(std::vector<int> const &branch, EventType e) {
+static Log runs(std::vector<int> const &branch, EventType e, State const *chart = states) {
   Log l;
   for (int s : branch) {
-    l.push_back(name(&states[s]) + ".run(" + std::to_string(e) + ")");
+    l.push_back(name(&chart[s]) + ".run(" + std::to_string(e) + ")");
   }
   return l;
 }
+
+/** \brief Same as runs() for the SCXML semantics chart. */
+static Log xruns(std::vector<int> const &branch, EventType e) { return runs(branch, e, xstates); }
 
 static Log operator+(Log a, Log const &b) {
   a.insert(a.end(), b.begin(), b.end());
@@ -165,8 +174,7 @@ TEST_CASE_FIXTURE(Fixture, "AAA to AAB to B to A deep history") {
                          runs({AAB, AA, A, ROOT}, EV_5));
 }
 
-// Relies on undefined behaviour: all choice guards false (see SC_TYPE_CHOICE). Documents the
-// current implementation, which waits in the choice state and re-evaluates on the next poll.
+// All choice guards false: waits in the choice state and re-evaluates on the next sc_run().
 TEST_CASE_FIXTURE(Fixture, "A to C via choice on later poll") {
   prepare();
   CHECK(run(EV_6) == Log{"guard", "-AAA", "-AA", "act"} + runs({A, ROOT}, EV_6));
@@ -211,10 +219,11 @@ TEST_CASE_FIXTURE(Fixture, "AA to AAB local") {
   CHECK(run(EV_10) == Log{"guard", "-AAA", "act", "+AAB"} + runs({AAB, AA, A, ROOT}, EV_10));
 }
 
-TEST_CASE_FIXTURE(Fixture, "AAB to AA local") {
+TEST_CASE_FIXTURE(Fixture, "AAB to AA local behaves as external") {
   prepare({EV_10});
-  // Local child -> parent: AA is not exited/entered, only re-initialized.
-  CHECK(run(EV_12) == Log{"guard", "-AAB", "act", "+AAA"} + runs({AAA, AA, A, ROOT}, EV_12));
+  // Local only applies when the target is a descendant of the source (SCXML type="internal").
+  CHECK(run(EV_12) == Log{"guard", "-AAB", "-AA", "act", "+AA", "+AAA"} +
+                          runs({AAA, AA, A, ROOT}, EV_12));
 }
 
 TEST_CASE_FIXTURE(Fixture, "AAA to AAA internal") {
@@ -243,12 +252,60 @@ TEST_CASE_FIXTURE(Fixture, "false guard takes no transition") {
   CHECK(last == &states[AAA]);
 }
 
+/* -------- SCXML SEMANTICS -------- */
+
+struct XFixture : Fixture {
+  State *const xroot = &xstates[XROOT];
+
+  void xprepare() {
+    sc_init(xroot);
+    calls.clear();
+  }
+
+  Log xrun(EventType e) {
+    calls.clear();
+    last = sc_run(xroot, e);
+    return calls;
+  }
+};
+
+TEST_CASE_FIXTURE(XFixture, "init takes automatic transitions") {
+  x_auto_return = true;
+  CHECK(sc_init(xroot) == &xstates[XR]);
+  // No run functions on init
+  CHECK(calls == Log{"+XROOT", "+XP", "+XPA", "auto", "-XPA", "-XP", "+XR"});
+}
+
+TEST_CASE_FIXTURE(XFixture, "event transitions take priority over automatic transitions") {
+  xprepare();
+  x_auto_return = true;
+  // XPA's automatic transition is listed first and enabled, but the event is processed first.
+  CHECK(xrun(EV_2) == Log{"guard", "-XPA", "-XP", "act", "+XQ"} + xruns({XQ, XROOT}, EV_2));
+}
+
+TEST_CASE_FIXTURE(XFixture, "automatic transitions are checked after an event without transition") {
+  xprepare();
+  x_auto_return = true;
+  CHECK(xrun(EV_4) == Log{"auto", "-XPA", "-XP", "+XR"} + xruns({XR, XROOT}, EV_4));
+}
+
+TEST_CASE_FIXTURE(XFixture, "deeper source takes priority in root table") {
+  xprepare();
+  // Root table lists XP -> XQ first, but XPA -> XPB has the deeper source.
+  CHECK(xrun(EV_1) == Log{"guard", "-XPA", "act", "+XPB"} + xruns({XPB, XP, XROOT}, EV_1));
+}
+
+TEST_CASE_FIXTURE(XFixture, "targetless transition only executes its action") {
+  xprepare();
+  CHECK(xrun(EV_3) == Log{"guard", "act", "auto"} + xruns({XPA, XP, XROOT}, EV_3));
+  CHECK(last == &xstates[XPA]);
+}
+
 /*
  * TODO:
  *
  * - Empty state and transition functions
  * - Parent state with no initial (Should work as target and with child as target)
- * - Auto transition on normal states
  * - Auto transitions on history states (Should not execute!)
  * - initial != self (can be caught)
  * - initial != other parent (can be caught)

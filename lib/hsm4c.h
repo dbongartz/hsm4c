@@ -2,7 +2,23 @@
  * \brief Statechart implementation in C
  * \file
  *
- * Tries to make UML 2 statecharts accessible in C.
+ * Tries to make statecharts accessible in C.
+ *
+ * The structure (states, pseudo states, transition kinds) follows UML 2. The execution
+ * semantics follow SCXML (W3C): event transitions are taken first, then automatic
+ * (event-less) transitions until none is enabled.
+ *
+ * Terminology mapping:
+ *
+ * | hsm4c                         | UML                   | SCXML                           |
+ * |-------------------------------|-----------------------|---------------------------------|
+ * | SC_TTYPE_EXTERNAL             | external transition   | type="external"                 |
+ * | SC_TTYPE_LOCAL                | local transition      | type="internal"                 |
+ * | `to == NULL`                  | internal transition   | targetless transition           |
+ * | SC_NO_EVENT transition        | completion transition | event-less transition           |
+ * | SC_TYPE_CHOICE                | choice                | state with event-less transitions |
+ * | SC_TYPE_HISTORY(_DEEP)        | (deep) history        | history type="shallow"/"deep"   |
+ * | run_fn                        | do activity (approx.) | -                               |
  *
  * Supports:
  *
@@ -10,7 +26,7 @@
  * - Entry/exit/run state actions.
  * - Run functions can trigger an immediate transition.
  * - Transitions with guard and action.
- * - External, local and internal transitions.
+ * - External, local and internal (targetless) transitions.
  * - Automatic (event-less) transitions.
  * - Initial child states.
  * - History and deep history pseudo states with an optional initial state.
@@ -69,8 +85,9 @@ typedef enum StateType {
    * Must not have entry/exit/run/children.
    * Must only have automatic (SC_NO_EVENT) guarded transitions in its own transition table.
    * Guards are evaluated in table order and the first true one is taken.
-   * At least one guard must be true (use a NULL guard as the last "else" transition).
-   * If none is true, the behaviour is undefined.
+   * If no guard is true, the statechart stays in the choice state and re-evaluates the
+   * guards on every following sc_run(), like an SCXML state with event-less transitions.
+   * Use a NULL guard as the last transition for an "else" branch.
    */
   SC_TYPE_CHOICE,
 
@@ -97,13 +114,12 @@ typedef enum TransitionType {
   SC_TTYPE_EXTERNAL = 0,
 
   /**
-   * \brief Local transition. The containing state is not exited and re-entered.
+   * \brief Local transition (SCXML type="internal").
    *
-   * Must be "Parent -> Child", "Child -> Parent" or "Same -> Same".
-   * - "Parent -> Child": the parent is not exited, its active substates are.
-   * - "Child -> Parent": the parent is not exited/entered, only re-initialized.
-   * - "Same -> Same": internal transition. Only the action is executed, no state is exited
-   *   or entered and the active states do not change.
+   * - Target is a descendant of the source: the source is not exited, only its active
+   *   substates are.
+   * - Target is the source ("Same -> Same"): internal transition, same as `to == NULL`.
+   * - Any other target: behaves like an external transition.
    */
   SC_TTYPE_LOCAL,
 
@@ -118,10 +134,10 @@ typedef enum ScEvents {
   /**
    * \brief Use this for event-less / automatic transitions, or as sc_run() event to only poll.
    *
-   * Automatic transitions are checked after every transition and on every sc_run() call,
-   * whatever the event. Their guards are therefore polled until one becomes true.
-   * Note: this follows SCXML. In UML, a completion transition is only checked once, when its
-   * source state has been entered.
+   * Automatic transitions are checked by sc_init() and after every sc_run() event, until
+   * none is enabled (SCXML semantics). Their guards are therefore polled until one becomes
+   * true. Note: in UML, a completion transition is only checked once, when its source state
+   * has been entered.
    */
   SC_NO_EVENT = 0,
 } ScEvents;
@@ -136,8 +152,8 @@ typedef void (*entry_fn)(State const *s);
 /**
  * \brief Run function prototype.
  *
- * Called for every state of the active branch, leaf first, when sc_run() takes no table
- * transition, and again after each transition.
+ * Called by sc_run() for every state of the active branch, leaf first, whenever no automatic
+ * transition is enabled: after the event was processed and again after each transition.
  *
  * \param s   State being run.
  * \param e   Event passed to sc_run().
@@ -181,7 +197,12 @@ struct Transition {
    * In a state's own table it must be that state. In the root's table it can be any state.
    */
   State *const from;
-  /** \brief Target state of the transition. Must be a valid state other than the root. */
+  /**
+   * \brief Target state of the transition. Must not be the root.
+   *
+   * NULL for a targetless (internal) transition: only the action is executed, no state is
+   * exited or entered.
+   */
   State *const to;
   /** \brief Event the transition reacts to. Must be positive or SC_NO_EVENT. */
   EventType const event;
@@ -219,9 +240,10 @@ struct StateConfig {
   /**
    * \brief Transition table, terminated by SC_TRANSITIONS_END. (optional)
    *
-   * Tables are searched from the active leaf up to the root, so transitions of inner states
-   * take priority. In the root's table, the first matching row whose source is in the active
-   * branch is taken.
+   * The states of the active branch are searched from the leaf up to the root, so transitions
+   * of deeper states take priority. For each state, its own table is searched first, then the
+   * rows of the root's table with that state as source. Within a table, the first enabled row
+   * is taken.
    */
   Transition const *transitions;
 };
@@ -242,12 +264,13 @@ struct State {
 /**
  * \brief Initializes a statechart.
  *
- * Enters the root and its initial states down to a leaf, calling their entry functions.
+ * Enters the root and its initial states down to a leaf, calling their entry functions,
+ * then takes automatic transitions until none is enabled. Run functions are not called.
  * History of other states is kept. To reset it, call sc_reset_state() on all states.
  *
  * \param root          Statechart root state.
  *
- * \return              Leaf state after init.
+ * \return              Active leaf state after init.
  */
 State const *sc_init(State *root);
 
@@ -265,8 +288,9 @@ void sc_map_stateconfig_to_states(size_t num_states, State states[num_states],
 /**
  * \brief Runs one iteration of the statechart.
  *
- * Takes the first matching transition, followed by all enabled automatic transitions.
- * Run functions are called when no transition is taken and after each transition.
+ * Takes the enabled transition for the event, if any. Then takes automatic transitions
+ * until none is enabled. Whenever no automatic transition is enabled, the run functions of
+ * the active branch are called, and can request a further transition.
  *
  * \param root    Statechart root state.
  * \param event   Event to pass to the statechart. Must be > 0, or SC_NO_EVENT to only poll.

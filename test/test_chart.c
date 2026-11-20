@@ -181,9 +181,38 @@ static StateConfig const statecfgs[_NUM_STATES] = {
         },
 };
 
+State xstates[_NUM_XSTATES];
+
+static Transition const transitions_xroot[] = {
+    {&xstates[XP], &xstates[XQ], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&xstates[XPA], &xstates[XPB], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    SC_TRANSITIONS_END,
+};
+static Transition const transitions_xpa[] = {
+    {&xstates[XPA], &xstates[XR], EV_NO_EVENT, NULL, x_auto, SC_TTYPE_EXTERNAL},
+    {&xstates[XPA], &xstates[XQ], EV_2, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    {&xstates[XPA], NULL, EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
+    SC_TRANSITIONS_END,
+};
+
+#define XSTATE(n, ...) {.name = n, .entry_fn = s_entry, .exit_fn = s_exit, .run_fn = s_run, __VA_ARGS__}
+static StateConfig const xstatecfgs[_NUM_XSTATES] = {
+    [XROOT] = XSTATE("XROOT", .initial = &xstates[XP], .type = SC_TYPE_ROOT,
+                     .transitions = transitions_xroot),
+    [XP] = XSTATE("XP", .parent = &xstates[XROOT], .initial = &xstates[XPA]),
+    [XPA] = XSTATE("XPA", .parent = &xstates[XP], .transitions = transitions_xpa),
+    [XPB] = XSTATE("XPB", .parent = &xstates[XP]),
+    [XQ] = XSTATE("XQ", .parent = &xstates[XROOT]),
+    [XR] = XSTATE("XR", .parent = &xstates[XROOT]),
+};
+
 void chart_reset(void) {
   sc_map_stateconfig_to_states(_NUM_STATES, states, statecfgs);
   for (size_t i = 0; i < _NUM_STATES; ++i) {
     sc_reset_state(&states[i]);
+  }
+  sc_map_stateconfig_to_states(_NUM_XSTATES, xstates, xstatecfgs);
+  for (size_t i = 0; i < _NUM_XSTATES; ++i) {
+    sc_reset_state(&xstates[i]);
   }
 }

@@ -45,7 +45,7 @@ A -> B_H : EV_7 [t_guard] / t_action()
 AAA --> AAA : EV_8 [t_guard] / t_action()
 AA -> AAB : EV_9 [t_guard] / t_action()
 AA -> AAB : EV_10 [t_guard] / t_action() <<local>>
-AAB --> AA : EV_12 [t_guard] / t_action() <<local>>
+AAB --> AA : EV_12 [t_guard] / t_action() <<local, behaves external>>
 A --> A : EV_13 [t_guard] / t_action() <<internal>>
 AAA --> AAA : EV_11 [t_guard] / t_action() <<internal>>
 

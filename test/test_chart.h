@@ -16,6 +16,20 @@ enum events {
 
 extern State states[_NUM_STATES];
 
+/*
+ * Second chart for SCXML semantics:
+ *
+ * XROOT (initial XP, table: XP -> XQ on EV_1, XPA -> XPB on EV_1)
+ * +- XP (initial XPA)
+ * |  +- XPA (table: XPA -> XR automatic [x_auto], XPA -> XQ on EV_2, XPA -> (none) on EV_3)
+ * |  +- XPB
+ * +- XQ
+ * +- XR
+ */
+enum xstates { XROOT, XP, XPA, XPB, XQ, XR, _NUM_XSTATES };
+
+extern State xstates[_NUM_XSTATES];
+
 /** \brief Map configs and reset all states. */
 void chart_reset(void);
 
@@ -27,6 +41,7 @@ bool t_guard(State const *root);
 void t_action(State const *root);
 bool t_choice_A(State const *root);
 bool t_choice_B(State const *root);
+bool x_auto(State const *root);
 
 #ifdef __cplusplus
 }
