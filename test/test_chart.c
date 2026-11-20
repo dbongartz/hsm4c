@@ -1,50 +1,50 @@
 #include "test_chart.h"
 
-State states[NUM_STATES];
+hsm4c_state_t states[NUM_STATES];
 
-static Transition const transitions_a[] = {
-    {&states[A], &states[B], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[A], &states[BB], EV_2, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[A], &states[B_H], EV_7, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[A], &states[A], EV_13, t_action, t_guard, SC_TTYPE_LOCAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_a[] = {
+    {&states[A], &states[B], EV_1, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    {&states[A], &states[BB], EV_2, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    {&states[A], &states[B_H], EV_7, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    {&states[A], &states[A], EV_13, t_action, t_guard, HSM4C_TRANSITION_LOCAL},
+    HSM4C_TRANSITIONS_END,
 };
-static Transition const transitions_b[] = {
-    {&states[B], &states[A], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[B], &states[A_H], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[B], &states[A_H], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[B], &states[A_DH], EV_5, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_b[] = {
+    {&states[B], &states[A], EV_1, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    {&states[B], &states[A_H], EV_3, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    {&states[B], &states[A_H], EV_4, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    {&states[B], &states[A_DH], EV_5, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
 };
-static Transition const transitions_aa[] = {
-    {&states[AA], &states[AB], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AA], &states[B], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AA], &states[A_CHOICE], EV_6, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AA], &states[AAB], EV_9, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AA], &states[AAB], EV_10, t_action, t_guard, SC_TTYPE_LOCAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_aa[] = {
+    {&states[AA], &states[AB], EV_3, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    {&states[AA], &states[B], EV_4, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    {&states[AA], &states[A_CHOICE], EV_6, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    {&states[AA], &states[AAB], EV_9, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    {&states[AA], &states[AAB], EV_10, t_action, t_guard, HSM4C_TRANSITION_LOCAL},
+    HSM4C_TRANSITIONS_END,
 };
-static Transition const transitions_ab[] = {
-    {&states[AB], &states[B], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_ab[] = {
+    {&states[AB], &states[B], EV_3, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
 };
-static Transition const transitions_aaa[] = {
-    {&states[AAA], &states[AAB], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AAA], &states[AAA], EV_8, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AAA], &states[AAA], EV_11, t_action, t_guard, SC_TTYPE_LOCAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_aaa[] = {
+    {&states[AAA], &states[AAB], EV_4, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    {&states[AAA], &states[AAA], EV_8, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    {&states[AAA], &states[AAA], EV_11, t_action, t_guard, HSM4C_TRANSITION_LOCAL},
+    HSM4C_TRANSITIONS_END,
 };
-static Transition const transitions_aab[] = {
-    {&states[AAB], &states[AA], EV_12, t_action, t_guard, SC_TTYPE_LOCAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_aab[] = {
+    {&states[AAB], &states[AA], EV_12, t_action, t_guard, HSM4C_TRANSITION_LOCAL},
+    HSM4C_TRANSITIONS_END,
 };
-static Transition const transitions_a_choice[] = {
-    {&states[A_CHOICE], &states[B], EV_NO_EVENT, t_action, t_choice_A, SC_TTYPE_EXTERNAL},
-    {&states[A_CHOICE], &states[C], EV_NO_EVENT, t_action, t_choice_B, SC_TTYPE_EXTERNAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_a_choice[] = {
+    {&states[A_CHOICE], &states[B], EV_NO_EVENT, t_action, t_choice_A, HSM4C_TRANSITION_EXTERNAL},
+    {&states[A_CHOICE], &states[C], EV_NO_EVENT, t_action, t_choice_B, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
 };
 
-static StateConfig const statecfgs[NUM_STATES] = {
+static hsm4c_state_config_t const statecfgs[NUM_STATES] = {
     [ROOT] =
         {
             .name = "ROOT",
@@ -52,7 +52,7 @@ static StateConfig const statecfgs[NUM_STATES] = {
             .exit_fn = s_exit,
             .run_fn = s_run,
             .initial = &states[A],
-            .type = SC_TYPE_ROOT,
+            .type = HSM4C_STATE_ROOT,
         },
     [A] =
         {
@@ -156,50 +156,50 @@ static StateConfig const statecfgs[NUM_STATES] = {
             .name = "A_H",
             .parent = &states[A],
             .initial = &states[AB],
-            .type = SC_TYPE_HISTORY,
+            .type = HSM4C_STATE_HISTORY,
         },
     [B_H] =
         {
             .name = "B_H",
             .parent = &states[B],
             .initial = &states[BC],
-            .type = SC_TYPE_HISTORY,
+            .type = HSM4C_STATE_HISTORY,
         },
     [A_DH] =
         {
             .name = "A_DH",
             .parent = &states[A],
             .initial = &states[AC],
-            .type = SC_TYPE_HISTORY_DEEP,
+            .type = HSM4C_STATE_HISTORY_DEEP,
         },
     [A_CHOICE] =
         {
             .name = "A_CHOICE",
             .parent = &states[A],
-            .type = SC_TYPE_CHOICE,
+            .type = HSM4C_STATE_CHOICE,
             .transitions = transitions_a_choice,
         },
 };
 
-State xstates[NUM_XSTATES];
+hsm4c_state_t xstates[NUM_XSTATES];
 
-static Transition const transitions_xroot[] = {
-    {&xstates[XP], &xstates[XQ], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&xstates[XPA], &xstates[XPB], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&xstates[XROOT], &xstates[XQ], EV_5, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_xroot[] = {
+    {&xstates[XP], &xstates[XQ], EV_1, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    {&xstates[XPA], &xstates[XPB], EV_1, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    {&xstates[XROOT], &xstates[XQ], EV_5, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
 };
-static Transition const transitions_xpa[] = {
-    {&xstates[XPA], &xstates[XR], EV_NO_EVENT, NULL, x_auto, SC_TTYPE_EXTERNAL},
-    {&xstates[XPA], &xstates[XQ], EV_2, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&xstates[XPA], NULL, EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_xpa[] = {
+    {&xstates[XPA], &xstates[XR], EV_NO_EVENT, NULL, x_auto, HSM4C_TRANSITION_EXTERNAL},
+    {&xstates[XPA], &xstates[XQ], EV_2, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    {&xstates[XPA], NULL, EV_3, t_action, t_guard, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
 };
 
 #define XSTATE(n, ...)                                                                             \
   { .name = n, .entry_fn = s_entry, .exit_fn = s_exit, .run_fn = s_run, __VA_ARGS__ }
-static StateConfig const xstatecfgs[NUM_XSTATES] = {
-    [XROOT] = XSTATE("XROOT", .initial = &xstates[XP], .type = SC_TYPE_ROOT,
+static hsm4c_state_config_t const xstatecfgs[NUM_XSTATES] = {
+    [XROOT] = XSTATE("XROOT", .initial = &xstates[XP], .type = HSM4C_STATE_ROOT,
                      .transitions = transitions_xroot),
     [XP] = XSTATE("XP", .parent = &xstates[XROOT], .initial = &xstates[XPA]),
     [XPA] = XSTATE("XPA", .parent = &xstates[XP], .transitions = transitions_xpa),
@@ -209,12 +209,12 @@ static StateConfig const xstatecfgs[NUM_XSTATES] = {
 };
 
 void chart_reset(void) {
-  sc_map_stateconfig_to_states(NUM_STATES, states, statecfgs);
+  hsm4c_map_stateconfig_to_states(NUM_STATES, states, statecfgs);
   for (size_t i = 0; i < NUM_STATES; ++i) {
-    sc_reset_state(&states[i]);
+    hsm4c_reset_state(&states[i]);
   }
-  sc_map_stateconfig_to_states(NUM_XSTATES, xstates, xstatecfgs);
+  hsm4c_map_stateconfig_to_states(NUM_XSTATES, xstates, xstatecfgs);
   for (size_t i = 0; i < NUM_XSTATES; ++i) {
-    sc_reset_state(&xstates[i]);
+    hsm4c_reset_state(&xstates[i]);
   }
 }
