@@ -26,116 +26,133 @@
 
 enum my_states { ROOT, A, A_H, A_HD, BRANCH, B, C, D, D_H, E, F, G, G_HD, GA, GB, NUM_STATES };
 
-static State my_states[NUM_STATES];
+static char const *state_name(hsm4c_state_id_t state);
 
 /* -------- State functions -------- */
 
-static void entry(State const *s) { printf("  entry  %s\n", s->config->name); }
-
-static void exit_(State const *s) { printf("  exit   %s\n", s->config->name); }
-
-static State *run(State const *s, EventType e) {
-  printf("  run    %s (event %d)\n", s->config->name, e);
-  return NULL;
+static void entry(hsm4c_t *sm, hsm4c_state_id_t state) {
+  (void)sm;
+  printf("  entry  %s\n", state_name(state));
 }
 
-static State *branch_run(State const *s, EventType e) {
-  printf("  run    %s (event %d) -> D\n", s->config->name, e);
-  return &my_states[D];
+static void exit_(hsm4c_t *sm, hsm4c_state_id_t state) {
+  (void)sm;
+  printf("  exit   %s\n", state_name(state));
+}
+
+static hsm4c_state_id_t run(hsm4c_t *sm, hsm4c_state_id_t state, hsm4c_event_t const *e) {
+  (void)sm;
+  printf("  run    %s (event %d)\n", state_name(state), e->id);
+  return HSM4C_NO_STATE;
+}
+
+static hsm4c_state_id_t branch_run(hsm4c_t *sm, hsm4c_state_id_t state, hsm4c_event_t const *e) {
+  (void)sm;
+  printf("  run    %s (event %d) -> D\n", state_name(state), e->id);
+  return D;
 }
 
 /* -------- Transition functions -------- */
 
-static void action(State const *root) { printf("  action (root %s)\n", root->config->name); }
+static void action(hsm4c_t *sm, hsm4c_event_t const *e) {
+  printf("  action (in %s, event %d)\n", state_name(hsm4c_current(sm)), e->id);
+}
 
-static bool guard(State const *root) {
-  printf("  guard  (root %s)\n", root->config->name);
+static bool guard(hsm4c_t const *sm, hsm4c_event_t const *e) {
+  printf("  guard  (in %s, event %d)\n", state_name(hsm4c_current(sm)), e->id);
   return true;
 }
 
+/** \brief Application data, reached from callbacks via hsm4c_ctx(). */
+struct app {
+  int condition_calls;
+};
+
 /** \brief False on the first call, true afterwards. */
-static bool condition(State const *root) {
-  static int counter = 0;
-  printf("  condition (root %s): call %d\n", root->config->name, counter);
-  return counter++ >= 1;
+static bool condition(hsm4c_t const *sm, hsm4c_event_t const *e) {
+  (void)e;
+  struct app *const app = hsm4c_ctx(sm);
+  printf("  condition (in %s): call %d\n", state_name(hsm4c_current(sm)), app->condition_calls);
+  return app->condition_calls++ >= 1;
 }
 
 /* -------- Statechart -------- */
 
-static Transition const my_transitions[] = {
-    {.from = &my_states[A],
-     .to = &my_states[B],
-     .event = 1,
-     .transition_fn = action,
-     .guard_fn = guard},
-    {.from = &my_states[B],
-     .to = &my_states[A],
-     .event = 2,
-     .transition_fn = action,
-     .guard_fn = guard},
-    {.from = &my_states[B],
-     .to = &my_states[A_H],
-     .event = 3,
-     .transition_fn = action,
-     .guard_fn = guard},
-    {.from = &my_states[C], .to = &my_states[D_H], .event = 4},
-    {.from = &my_states[E], .to = &my_states[F], .event = 5},
-    {.from = &my_states[B],
-     .to = &my_states[A_HD],
-     .event = 6,
-     .transition_fn = action,
-     .guard_fn = guard},
-    {.from = &my_states[F], .to = &my_states[BRANCH], .event = 7},
-    {.from = &my_states[E], .to = &my_states[G_HD], .event = 7},
-    {.from = &my_states[GB], .to = &my_states[GA], .event = SC_NO_EVENT, .guard_fn = condition},
-    {.from = &my_states[GA], .to = &my_states[A], .event = SC_NO_EVENT, .guard_fn = condition},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const a_transitions[] = {
+    {.event = 1, .to = B, .guard_fn = guard, .action_fn = action},
+    HSM4C_TRANSITIONS_END,
+};
+
+static hsm4c_transition_t const b_transitions[] = {
+    {.event = 2, .to = A, .guard_fn = guard, .action_fn = action},
+    {.event = 3, .to = A_H, .guard_fn = guard, .action_fn = action},
+    {.event = 6, .to = A_HD, .guard_fn = guard, .action_fn = action},
+    HSM4C_TRANSITIONS_END,
+};
+
+static hsm4c_transition_t const c_transitions[] = {
+    {.event = 4, .to = D_H},
+    HSM4C_TRANSITIONS_END,
+};
+
+static hsm4c_transition_t const e_transitions[] = {
+    {.event = 5, .to = F},
+    {.event = 7, .to = G_HD},
+    HSM4C_TRANSITIONS_END,
+};
+
+static hsm4c_transition_t const f_transitions[] = {
+    {.event = 7, .to = BRANCH},
+    HSM4C_TRANSITIONS_END,
+};
+
+static hsm4c_transition_t const ga_transitions[] = {
+    {.event = HSM4C_NO_EVENT, .to = A, .guard_fn = condition},
+    HSM4C_TRANSITIONS_END,
+};
+
+static hsm4c_transition_t const gb_transitions[] = {
+    {.event = HSM4C_NO_EVENT, .to = GA, .guard_fn = condition},
+    HSM4C_TRANSITIONS_END,
 };
 
 #define STATE(n, ...)                                                                              \
   { .name = n, .entry_fn = entry, .exit_fn = exit_, __VA_ARGS__ }
 
-static StateConfig const my_statecfgs[NUM_STATES] = {
-    [ROOT] = {.name = "ROOT",
-              .initial = &my_states[A],
-              .type = SC_TYPE_ROOT,
-              .transitions = my_transitions},
-    [A] = STATE("A", .parent = &my_states[ROOT], .initial = &my_states[C]),
-    [A_H] = {.name = "A_H", .parent = &my_states[A], .type = SC_TYPE_HISTORY},
-    [A_HD] = {.name = "A_HD",
-              .parent = &my_states[A],
-              .initial = &my_states[C],
-              .type = SC_TYPE_HISTORY_DEEP},
-    [BRANCH] = {.name = "BRANCH", .run_fn = branch_run, .parent = &my_states[A]},
-    [B] = STATE("B", .run_fn = run, .parent = &my_states[ROOT]),
-    [C] = STATE("C", .parent = &my_states[A]),
-    [D] = STATE("D", .parent = &my_states[A], .initial = &my_states[E]),
-    [D_H] = {.name = "D_H",
-             .parent = &my_states[D],
-             .initial = &my_states[E],
-             .type = SC_TYPE_HISTORY},
-    [E] = STATE("E", .parent = &my_states[D]),
-    [F] = STATE("F", .run_fn = run, .parent = &my_states[D]),
-    [G] = STATE("G", .parent = &my_states[ROOT], .initial = &my_states[GA]),
-    [G_HD] = {.name = "G_HD",
-              .parent = &my_states[G],
-              .initial = &my_states[GB],
-              .type = SC_TYPE_HISTORY_DEEP},
-    [GA] = STATE("GA", .parent = &my_states[G]),
-    [GB] = STATE("GB", .parent = &my_states[G]),
+/* .parent defaults to ROOT (0) */
+static hsm4c_state_t const my_states[NUM_STATES] = {
+    [ROOT] = {.name = "ROOT", .initial = A},
+    [A] = STATE("A", .initial = C, .transitions = a_transitions),
+    [A_H] = {.name = "A_H", .parent = A, .type = HSM4C_STATE_HISTORY},
+    [A_HD] = {.name = "A_HD", .parent = A, .initial = C, .type = HSM4C_STATE_HISTORY_DEEP},
+    [BRANCH] = {.name = "BRANCH", .parent = A, .run_fn = branch_run},
+    [B] = STATE("B", .run_fn = run, .transitions = b_transitions),
+    [C] = STATE("C", .parent = A, .transitions = c_transitions),
+    [D] = STATE("D", .parent = A, .initial = E),
+    [D_H] = {.name = "D_H", .parent = D, .initial = E, .type = HSM4C_STATE_HISTORY},
+    [E] = STATE("E", .parent = D, .transitions = e_transitions),
+    [F] = STATE("F", .parent = D, .run_fn = run, .transitions = f_transitions),
+    [G] = STATE("G", .initial = GA),
+    [G_HD] = {.name = "G_HD", .parent = G, .initial = GB, .type = HSM4C_STATE_HISTORY_DEEP},
+    [GA] = STATE("GA", .parent = G, .transitions = ga_transitions),
+    [GB] = STATE("GB", .parent = G, .transitions = gb_transitions),
 };
+
+static hsm4c_chart_t const my_chart = HSM4C_CHART(my_states);
+
+static char const *state_name(hsm4c_state_id_t state) { return my_states[state].name; }
 
 /* -------- Main -------- */
 
 struct step {
-  EventType event;
+  hsm4c_event_id_t event;
   char const *expected;
 };
 
 int main(void) {
   static struct step const steps[] = {
       {1, "B"},
-      {SC_NO_EVENT, "B (no change)"},
+      {HSM4C_NO_EVENT, "B (no change)"},
       {2, "C (A initial)"},
       {4, "E (D_H without history -> its initial E)"},
       {1, "B"},
@@ -150,23 +167,29 @@ int main(void) {
       {7, "GB (G_HD without history -> its initial GB, condition false)"},
       {7, "C (condition true: GB -> GA -> A)"},
       {8, "C (no change, no transition for event 8)"},
-      {SC_NO_EVENT, "C (no change)"},
+      {HSM4C_NO_EVENT, "C (no change)"},
   };
 
   printf("hsm4c demo\n");
-  printf("sizeof(State): %zu, sizeof(Transition): %zu\n\n", sizeof(State), sizeof(Transition));
+  printf("sizeof(hsm4c_state_t): %zu, sizeof(hsm4c_transition_t): %zu\n\n", sizeof(hsm4c_state_t),
+         sizeof(hsm4c_transition_t));
 
-  State *my_sm = &my_states[ROOT];
-  sc_map_stateconfig_to_states(NUM_STATES, my_states, my_statecfgs);
+  struct app app = {0};
+  hsm4c_t sm;
+  hsm4c_state_id_t active[NUM_STATES];
 
-  printf("sc_init()\n");
-  State const *current = sc_init(my_sm);
-  printf("-> %s\n\n", current->config->name);
+  printf("hsm4c_init()\n");
+  if (hsm4c_init(&sm, &my_chart, active, &app) != HSM4C_OK) {
+    return 1;
+  }
+  printf("-> %s\n\n", state_name(hsm4c_current(&sm)));
 
   for (size_t i = 0; i < sizeof(steps) / sizeof(steps[0]); ++i) {
-    printf("sc_run(%d), expected: %s\n", steps[i].event, steps[i].expected);
-    current = sc_run(my_sm, steps[i].event);
-    printf("-> %s\n\n", current->config->name);
+    printf("hsm4c_run(%d), expected: %s\n", steps[i].event, steps[i].expected);
+    if (hsm4c_run(&sm, steps[i].event, NULL) != HSM4C_OK) {
+      return 1;
+    }
+    printf("-> %s\n\n", state_name(hsm4c_current(&sm)));
   }
 
   return 0;

@@ -1,58 +1,55 @@
 #include "test_chart.h"
 
-State states[NUM_STATES];
-
-static Transition const transitions_a[] = {
-    {&states[A], &states[B], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[A], &states[BB], EV_2, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[A], &states[B_H], EV_7, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[A], &states[A], EV_13, t_action, t_guard, SC_TTYPE_LOCAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_a[] = {
+    {EV_1, B, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    {EV_2, BB, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    {EV_7, B_H, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    {EV_13, A, t_guard, t_action, HSM4C_TRANSITION_LOCAL},
+    HSM4C_TRANSITIONS_END,
 };
-static Transition const transitions_b[] = {
-    {&states[B], &states[A], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[B], &states[A_H], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[B], &states[A_H], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[B], &states[A_DH], EV_5, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_b[] = {
+    {EV_1, A, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    {EV_3, A_H, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    {EV_4, A_H, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    {EV_5, A_DH, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
 };
-static Transition const transitions_aa[] = {
-    {&states[AA], &states[AB], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AA], &states[B], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AA], &states[A_CHOICE], EV_6, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AA], &states[AAB], EV_9, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AA], &states[AAB], EV_10, t_action, t_guard, SC_TTYPE_LOCAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_aa[] = {
+    {EV_3, AB, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    {EV_4, B, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    {EV_6, A_CHOICE, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    {EV_9, AAB, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    {EV_10, AAB, t_guard, t_action, HSM4C_TRANSITION_LOCAL},
+    HSM4C_TRANSITIONS_END,
 };
-static Transition const transitions_ab[] = {
-    {&states[AB], &states[B], EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_ab[] = {
+    {EV_3, B, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
 };
-static Transition const transitions_aaa[] = {
-    {&states[AAA], &states[AAB], EV_4, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AAA], &states[AAA], EV_8, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&states[AAA], &states[AAA], EV_11, t_action, t_guard, SC_TTYPE_LOCAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_aaa[] = {
+    {EV_4, AAB, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    {EV_8, AAA, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    {EV_11, AAA, t_guard, t_action, HSM4C_TRANSITION_LOCAL},
+    HSM4C_TRANSITIONS_END,
 };
-static Transition const transitions_aab[] = {
-    {&states[AAB], &states[AA], EV_12, t_action, t_guard, SC_TTYPE_LOCAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_aab[] = {
+    {EV_12, AA, t_guard, t_action, HSM4C_TRANSITION_LOCAL},
+    HSM4C_TRANSITIONS_END,
 };
-static Transition const transitions_a_choice[] = {
-    {&states[A_CHOICE], &states[B], EV_NO_EVENT, t_action, t_choice_A, SC_TTYPE_EXTERNAL},
-    {&states[A_CHOICE], &states[C], EV_NO_EVENT, t_action, t_choice_B, SC_TTYPE_EXTERNAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_a_choice[] = {
+    {EV_NO_EVENT, B, t_choice_A, t_action, HSM4C_TRANSITION_EXTERNAL},
+    {EV_NO_EVENT, C, t_choice_B, t_action, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
 };
 
-static StateConfig const statecfgs[NUM_STATES] = {
+static hsm4c_state_t const states[NUM_STATES] = {
     [ROOT] =
         {
             .name = "ROOT",
             .entry_fn = s_entry,
             .exit_fn = s_exit,
             .run_fn = s_run,
-            .initial = &states[A],
-            .type = SC_TYPE_ROOT,
+            .initial = A,
         },
     [A] =
         {
@@ -60,8 +57,8 @@ static StateConfig const statecfgs[NUM_STATES] = {
             .entry_fn = s_entry,
             .exit_fn = s_exit,
             .run_fn = s_run,
-            .parent = &states[ROOT],
-            .initial = &states[AA],
+            .parent = ROOT,
+            .initial = AA,
             .transitions = transitions_a,
         },
     [B] =
@@ -70,8 +67,8 @@ static StateConfig const statecfgs[NUM_STATES] = {
             .entry_fn = s_entry,
             .exit_fn = s_exit,
             .run_fn = s_run,
-            .parent = &states[ROOT],
-            .initial = &states[BA],
+            .parent = ROOT,
+            .initial = BA,
             .transitions = transitions_b,
         },
     [C] =
@@ -80,7 +77,7 @@ static StateConfig const statecfgs[NUM_STATES] = {
             .entry_fn = s_entry,
             .exit_fn = s_exit,
             .run_fn = s_run,
-            .parent = &states[ROOT],
+            .parent = ROOT,
         },
     [AA] =
         {
@@ -88,8 +85,8 @@ static StateConfig const statecfgs[NUM_STATES] = {
             .entry_fn = s_entry,
             .exit_fn = s_exit,
             .run_fn = s_run,
-            .parent = &states[A],
-            .initial = &states[AAA],
+            .parent = A,
+            .initial = AAA,
             .transitions = transitions_aa,
         },
     [AB] =
@@ -98,7 +95,7 @@ static StateConfig const statecfgs[NUM_STATES] = {
             .entry_fn = s_entry,
             .exit_fn = s_exit,
             .run_fn = s_run,
-            .parent = &states[A],
+            .parent = A,
             .transitions = transitions_ab,
         },
     [AC] =
@@ -107,7 +104,7 @@ static StateConfig const statecfgs[NUM_STATES] = {
             .entry_fn = s_entry,
             .exit_fn = s_exit,
             .run_fn = s_run,
-            .parent = &states[A],
+            .parent = A,
         },
     [BA] =
         {
@@ -115,7 +112,7 @@ static StateConfig const statecfgs[NUM_STATES] = {
             .entry_fn = s_entry,
             .exit_fn = s_exit,
             .run_fn = s_run,
-            .parent = &states[B],
+            .parent = B,
         },
     [BB] =
         {
@@ -123,7 +120,7 @@ static StateConfig const statecfgs[NUM_STATES] = {
             .entry_fn = s_entry,
             .exit_fn = s_exit,
             .run_fn = s_run,
-            .parent = &states[B],
+            .parent = B,
         },
     [BC] =
         {
@@ -131,7 +128,7 @@ static StateConfig const statecfgs[NUM_STATES] = {
             .entry_fn = s_entry,
             .exit_fn = s_exit,
             .run_fn = s_run,
-            .parent = &states[B],
+            .parent = B,
         },
     [AAA] =
         {
@@ -139,7 +136,7 @@ static StateConfig const statecfgs[NUM_STATES] = {
             .entry_fn = s_entry,
             .exit_fn = s_exit,
             .run_fn = s_run,
-            .parent = &states[AA],
+            .parent = AA,
             .transitions = transitions_aaa,
         },
     [AAB] =
@@ -148,73 +145,99 @@ static StateConfig const statecfgs[NUM_STATES] = {
             .entry_fn = s_entry,
             .exit_fn = s_exit,
             .run_fn = s_run,
-            .parent = &states[AA],
+            .parent = AA,
             .transitions = transitions_aab,
         },
     [A_H] =
         {
             .name = "A_H",
-            .parent = &states[A],
-            .initial = &states[AB],
-            .type = SC_TYPE_HISTORY,
+            .parent = A,
+            .initial = AB,
+            .type = HSM4C_STATE_HISTORY,
         },
     [B_H] =
         {
             .name = "B_H",
-            .parent = &states[B],
-            .initial = &states[BC],
-            .type = SC_TYPE_HISTORY,
+            .parent = B,
+            .initial = BC,
+            .type = HSM4C_STATE_HISTORY,
         },
     [A_DH] =
         {
             .name = "A_DH",
-            .parent = &states[A],
-            .initial = &states[AC],
-            .type = SC_TYPE_HISTORY_DEEP,
+            .parent = A,
+            .initial = AC,
+            .type = HSM4C_STATE_HISTORY_DEEP,
         },
     [A_CHOICE] =
         {
             .name = "A_CHOICE",
-            .parent = &states[A],
-            .type = SC_TYPE_CHOICE,
+            .parent = A,
+            .type = HSM4C_STATE_CHOICE,
             .transitions = transitions_a_choice,
         },
 };
 
-State xstates[NUM_XSTATES];
-
-static Transition const transitions_xroot[] = {
-    {&xstates[XP], &xstates[XQ], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&xstates[XPA], &xstates[XPB], EV_1, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&xstates[XROOT], &xstates[XQ], EV_5, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_xroot[] = {
+    {EV_5, XQ, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
 };
-static Transition const transitions_xpa[] = {
-    {&xstates[XPA], &xstates[XR], EV_NO_EVENT, NULL, x_auto, SC_TTYPE_EXTERNAL},
-    {&xstates[XPA], &xstates[XQ], EV_2, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    {&xstates[XPA], NULL, EV_3, t_action, t_guard, SC_TTYPE_EXTERNAL},
-    SC_TRANSITIONS_END,
+static hsm4c_transition_t const transitions_xp[] = {
+    {EV_1, XQ, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
+};
+static hsm4c_transition_t const transitions_xpa[] = {
+    {EV_NO_EVENT, XR, x_auto, NULL, HSM4C_TRANSITION_EXTERNAL},
+    {EV_1, XPB, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    {EV_2, XQ, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    {EV_3, HSM4C_NO_STATE, t_guard, t_action, HSM4C_TRANSITION_EXTERNAL},
+    {EV_6, XL1, NULL, NULL, HSM4C_TRANSITION_EXTERNAL},
+    {EV_7, XPB, NULL, x_raise, HSM4C_TRANSITION_EXTERNAL},
+    {EV_9, XS_DH, NULL, NULL, HSM4C_TRANSITION_EXTERNAL},
+    {EV_11, HSM4C_NO_STATE, NULL, NULL, HSM4C_TRANSITION_EXTERNAL},
+    {EV_12, XM1, NULL, NULL, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
+};
+/* Endless chain of internal events: each transition raises the next EV_13 */
+static hsm4c_transition_t const transitions_xm1[] = {
+    {EV_13, XM2, NULL, x_ping, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
+};
+static hsm4c_transition_t const transitions_xm2[] = {
+    {EV_13, XM1, NULL, x_ping, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
+};
+static hsm4c_transition_t const transitions_xpb[] = {
+    {EV_8, XR, NULL, NULL, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
+};
+/* Endless cycle of automatic transitions */
+static hsm4c_transition_t const transitions_xl1[] = {
+    {EV_NO_EVENT, XL2, NULL, NULL, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
+};
+static hsm4c_transition_t const transitions_xl2[] = {
+    {EV_NO_EVENT, XL1, NULL, NULL, HSM4C_TRANSITION_EXTERNAL},
+    HSM4C_TRANSITIONS_END,
 };
 
 #define XSTATE(n, ...)                                                                             \
   { .name = n, .entry_fn = s_entry, .exit_fn = s_exit, .run_fn = s_run, __VA_ARGS__ }
-static StateConfig const xstatecfgs[NUM_XSTATES] = {
-    [XROOT] = XSTATE("XROOT", .initial = &xstates[XP], .type = SC_TYPE_ROOT,
-                     .transitions = transitions_xroot),
-    [XP] = XSTATE("XP", .parent = &xstates[XROOT], .initial = &xstates[XPA]),
-    [XPA] = XSTATE("XPA", .parent = &xstates[XP], .transitions = transitions_xpa),
-    [XPB] = XSTATE("XPB", .parent = &xstates[XP]),
-    [XQ] = XSTATE("XQ", .parent = &xstates[XROOT]),
-    [XR] = XSTATE("XR", .parent = &xstates[XROOT]),
+static hsm4c_state_t const xstates[NUM_XSTATES] = {
+    [XROOT] = XSTATE("XROOT", .initial = XP, .transitions = transitions_xroot),
+    [XP] = XSTATE("XP", .parent = XROOT, .initial = XPA, .transitions = transitions_xp),
+    [XPA] = XSTATE("XPA", .parent = XP, .transitions = transitions_xpa),
+    [XPB] = XSTATE("XPB", .parent = XP, .transitions = transitions_xpb),
+    [XQ] = XSTATE("XQ", .parent = XROOT),
+    [XR] = XSTATE("XR", .parent = XROOT),
+    [XL1] = XSTATE("XL1", .parent = XROOT, .transitions = transitions_xl1),
+    [XL2] = XSTATE("XL2", .parent = XROOT, .transitions = transitions_xl2),
+    [XS] = XSTATE("XS", .parent = XROOT, .initial = XSA),
+    [XS_DH] = {.name = "XS_DH", .parent = XS, .type = HSM4C_STATE_HISTORY_DEEP},
+    [XSA] = XSTATE("XSA", .parent = XS),
+    [XM1] = XSTATE("XM1", .parent = XROOT, .transitions = transitions_xm1),
+    [XM2] = XSTATE("XM2", .parent = XROOT, .transitions = transitions_xm2),
 };
 
-void chart_reset(void) {
-  sc_map_stateconfig_to_states(NUM_STATES, states, statecfgs);
-  for (size_t i = 0; i < NUM_STATES; ++i) {
-    sc_reset_state(&states[i]);
-  }
-  sc_map_stateconfig_to_states(NUM_XSTATES, xstates, xstatecfgs);
-  for (size_t i = 0; i < NUM_XSTATES; ++i) {
-    sc_reset_state(&xstates[i]);
-  }
-}
+hsm4c_chart_t const chart = HSM4C_CHART(states);
+hsm4c_chart_t const xchart = HSM4C_CHART(xstates);

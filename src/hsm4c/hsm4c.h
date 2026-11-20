@@ -8,17 +8,22 @@
  * semantics follow SCXML (W3C): event transitions are taken first, then automatic
  * (event-less) transitions until none is enabled.
  *
+ * A statechart is a constant array of states (hsm4c_state_t), indexed by state ID. State 0 is
+ * always the root. Each state can have its own transition table. A machine (hsm4c_t) runs a
+ * chart and keeps its runtime data in an array of state IDs provided by the user, so one chart
+ * can drive several machines and can be placed in read-only memory.
+ *
  * Terminology mapping:
  *
- * | hsm4c                         | UML                   | SCXML                           |
- * |-------------------------------|-----------------------|---------------------------------|
- * | SC_TTYPE_EXTERNAL             | external transition   | type="external"                 |
- * | SC_TTYPE_LOCAL                | local transition      | type="internal"                 |
- * | `to == NULL`                  | internal transition   | targetless transition           |
- * | SC_NO_EVENT transition        | completion transition | event-less transition           |
- * | SC_TYPE_CHOICE                | choice                | state with event-less transitions |
- * | SC_TYPE_HISTORY(_DEEP)        | (deep) history        | history type="shallow"/"deep"   |
- * | run_fn (sc_run_fn)            | do activity (approx.) | -                               |
+ * | hsm4c                        | UML                   | SCXML                         |
+ * |------------------------------|-----------------------|-------------------------------|
+ * | HSM4C_TRANSITION_EXTERNAL    | external transition   | type="external"               |
+ * | HSM4C_TRANSITION_LOCAL       | local transition      | type="internal"               |
+ * | `to == HSM4C_NO_STATE`       | internal transition   | targetless transition         |
+ * | HSM4C_NO_EVENT transition    | completion transition | event-less transition         |
+ * | HSM4C_STATE_CHOICE           | choice                | state, event-less transitions |
+ * | HSM4C_STATE_HISTORY(_DEEP)   | (deep) history        | history type="shallow"/"deep" |
+ * | run_fn (hsm4c_run_fn_t)      | do activity (approx.) | -                             |
  *
  * Supports:
  *
@@ -34,7 +39,15 @@
  * - Relatively easy table-based syntax (see examples/hsm4c_demo.c).
  *
  * Does not support:
- * - Parallel (orthogonal) states.
+ * - Parallel (orthogonal) states and final states.
+ *
+ * Differences to SCXML besides those:
+ * - A state without an initial state is a leaf. SCXML enters its first child by default.
+ * - Events are integers matched exactly. SCXML matches event name prefixes and "*".
+ * - Initial and history default transitions have no actions.
+ *
+ * Conformance is tested with charts ported from the W3C SCXML IRP test suite
+ * (test/scxml_charts.c).
  *
  * (C) 2023 David Bongartz
  * MIT License
@@ -44,24 +57,133 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/** \brief State. See struct State. */
-typedef struct State State;
-/** \brief Constant state configuration. See struct StateConfig. */
-typedef struct StateConfig StateConfig;
-/** \brief Transition table row. See struct Transition. */
-typedef struct Transition Transition;
-/** \brief Event identifier. User events must be > 0, see ScEvents. */
-typedef int EventType;
+/*
+ * -------- Configuration --------
+ *
+ * Set these with the CMake cache variables of the same name, which define them for the library
+ * and everything linking hsm4c::hsm4c. Without CMake, define them the same way for the library
+ * and all code including this header: most of them change the layout of the types below.
+ */
 
-/** \brief State Types */
-typedef enum StateType {
+#ifndef HSM4C_CONFIG_STATE_NAMES
+/** \brief 1: hsm4c_state_t has a name field. */
+#define HSM4C_CONFIG_STATE_NAMES 1
+#endif
+
+#ifndef HSM4C_CONFIG_RUN_FN
+/** \brief 1: hsm4c_state_t has a run function, see hsm4c_run_fn_t. */
+#define HSM4C_CONFIG_RUN_FN 1
+#endif
+
+#ifndef HSM4C_CONFIG_GUARDS
+/** \brief 1: hsm4c_transition_t has a guard, see hsm4c_guard_fn_t. */
+#define HSM4C_CONFIG_GUARDS 1
+#endif
+
+#ifndef HSM4C_CONFIG_ACTIONS
+/** \brief 1: hsm4c_transition_t has an action, see hsm4c_action_fn_t. */
+#define HSM4C_CONFIG_ACTIONS 1
+#endif
+
+#ifndef HSM4C_CONFIG_VALIDATE
+/** \brief 1: hsm4c_init() checks the chart with hsm4c_validate(). Library only. */
+#define HSM4C_CONFIG_VALIDATE 1
+#endif
+
+#ifndef HSM4C_MAX_TRANSITIONS
+/**
+ * \brief Maximum length of a chain of transitions in one hsm4c_init() or hsm4c_run() call.
+ *
+ * Counts transitions taken for automatic transitions, internal events and run function
+ * requests, not the one for the hsm4c_run() event itself. Stops endless chains, e.g. a cycle of
+ * always enabled automatic transitions. Library only.
+ */
+#define HSM4C_MAX_TRANSITIONS 64
+#endif
+
+#ifndef HSM4C_EVENT_QUEUE_SIZE
+/** \brief Capacity of the internal event queue in hsm4c_t, see hsm4c_raise(). 1 to 255. */
+#define HSM4C_EVENT_QUEUE_SIZE 8
+#endif
+
+#if HSM4C_EVENT_QUEUE_SIZE < 1 || HSM4C_EVENT_QUEUE_SIZE > 255
+#error "HSM4C_EVENT_QUEUE_SIZE must be 1 to 255"
+#endif
+
+#ifndef HSM4C_STATE_ID_TYPE
+/** \brief Unsigned integer type of state IDs. Limits the number of states per chart. */
+#define HSM4C_STATE_ID_TYPE uint16_t
+#endif
+
+/** \brief State ID: index into the chart's state array. */
+typedef HSM4C_STATE_ID_TYPE hsm4c_state_id_t;
+
+/** \brief Event identifier. User events must be > 0, see hsm4c_reserved_event_t. */
+typedef int hsm4c_event_id_t;
+
+/** \brief Result of hsm4c_init() and hsm4c_run(). */
+typedef enum hsm4c_result {
+  /** \brief Success. */
+  HSM4C_OK = 0,
+  /**
+   * \brief A chain of more than HSM4C_MAX_TRANSITIONS transitions would have been taken.
+   *
+   * Processing stopped before the next transition. The machine is in a consistent state and
+   * hsm4c_current() reports the reached state. Internal events not processed yet stay queued.
+   */
+  HSM4C_ERR_LIMIT,
+  /** \brief hsm4c_run() was called from a callback of the same machine. Nothing was done. */
+  HSM4C_ERR_BUSY,
+  /** \brief hsm4c_raise(): the internal event queue is full. The event was dropped. */
+  HSM4C_ERR_QUEUE_FULL,
+  /** \brief The chart is invalid, see hsm4c_validate(). */
+  HSM4C_ERR_INVALID_CHART,
+  /**
+   * \brief A run function returned a state ID that is not in the chart.
+   *
+   * Processing stopped. The machine is in a consistent state.
+   */
+  HSM4C_ERR_INVALID_STATE,
+} hsm4c_result_t;
+
+/** \brief Event: identifier and optional user data. */
+typedef struct hsm4c_event {
+  /** \brief Event identifier. */
+  hsm4c_event_id_t id;
+  /** \brief User data. Can be NULL. */
+  void *data;
+} hsm4c_event_t;
+
+/** \brief State configuration. See struct hsm4c_state. */
+typedef struct hsm4c_state hsm4c_state_t;
+/** \brief Transition table row. See struct hsm4c_transition. */
+typedef struct hsm4c_transition hsm4c_transition_t;
+/** \brief Statechart. See struct hsm4c_chart. */
+typedef struct hsm4c_chart hsm4c_chart_t;
+/** \brief Machine running a statechart. See struct hsm4c. */
+typedef struct hsm4c hsm4c_t;
+
+/** \brief The root state. It is always state 0. */
+#define HSM4C_ROOT ((hsm4c_state_id_t)0)
+
+/**
+ * \brief "No state" for initial states, transition targets and run function results.
+ *
+ * Same value as HSM4C_ROOT. The root can never be an initial state, a transition target or a
+ * child, so 0 is free to mean "none" there. Zero-initialized fields therefore mean "none".
+ */
+#define HSM4C_NO_STATE ((hsm4c_state_id_t)0)
+
+/** \brief State types */
+typedef enum hsm4c_state_type {
   /** \brief Default (simple or composite) state type */
-  SC_TYPE_NORMAL = 0,
+  HSM4C_STATE_NORMAL = 0,
 
   /**
    * \brief History pseudo state. Must not have entry/exit/run/children.
@@ -70,7 +192,7 @@ typedef enum StateType {
    * If the parent has no last active substate, the history state's own initial state is
    * entered if set, the parent's initial state otherwise.
    */
-  SC_TYPE_HISTORY,
+  HSM4C_STATE_HISTORY,
 
   /**
    * \brief Deep history pseudo state. Must not have entry/exit/run/children.
@@ -81,33 +203,23 @@ typedef enum StateType {
    * If the parent has no last active substate, the history state's own initial state is
    * entered if set, the parent's initial state otherwise.
    */
-  SC_TYPE_HISTORY_DEEP,
+  HSM4C_STATE_HISTORY_DEEP,
 
   /**
    * \brief Choice pseudo state.
    *
    * Must not have entry/exit/run/children.
-   * Must only have automatic (SC_NO_EVENT) guarded transitions in its own transition table.
+   * Must only have automatic (HSM4C_NO_EVENT) guarded transitions in its own transition table.
    * Guards are evaluated in table order and the first true one is taken.
    * If no guard is true, the statechart stays in the choice state and re-evaluates the
-   * guards on every following sc_run(), like an SCXML state with event-less transitions.
+   * guards on every following hsm4c_run(), like an SCXML state with event-less transitions.
    * Use a NULL guard as the last transition for an "else" branch.
    */
-  SC_TYPE_CHOICE,
+  HSM4C_STATE_CHOICE,
+} hsm4c_state_type_t;
 
-  /**
-   * \brief Root state of the statechart.
-   *
-   * Can have entry/exit/run functions and a transition table.
-   * Must have an initial state.
-   * Must have no parent (NULL).
-   * Must not be the target of a transition.
-   */
-  SC_TYPE_ROOT,
-} StateType;
-
-/** \brief Transition Types */
-typedef enum TransitionType {
+/** \brief Transition types */
+typedef enum hsm4c_transition_type {
   /**
    * \brief External (default) transition.
    *
@@ -115,203 +227,309 @@ typedef enum TransitionType {
    * target are exited, then all states down to the target are entered. A self transition
    * exits and re-enters the state.
    */
-  SC_TTYPE_EXTERNAL = 0,
+  HSM4C_TRANSITION_EXTERNAL = 0,
 
   /**
    * \brief Local transition (SCXML type="internal").
    *
-   * - Target is a descendant of the source: the source is not exited, only its active
+   * - Target is a proper descendant of the source: the source is not exited, only its active
    *   substates are.
-   * - Target is the source ("Same -> Same"): internal transition, same as `to == NULL`.
-   * - Any other target: behaves like an external transition.
+   * - Any other target, including the source itself: behaves like an external transition.
+   *
+   * For an internal transition, which exits and enters nothing, use `to = HSM4C_NO_STATE`.
    */
-  SC_TTYPE_LOCAL,
+  HSM4C_TRANSITION_LOCAL,
 
   /**
-   * \brief Marks the end of a transition table. Use SC_TRANSITIONS_END.
+   * \brief Marks the end of a transition table. Use HSM4C_TRANSITIONS_END.
    */
-  SC_TTYPE_TABLE_END,
-} TransitionType;
+  HSM4C_TRANSITION_TABLE_END,
+} hsm4c_transition_type_t;
 
 /** \brief Special events. User events must be > 0. */
-typedef enum ScEvents {
+typedef enum hsm4c_reserved_event {
   /**
-   * \brief Use this for event-less / automatic transitions, or as sc_run() event to only poll.
+   * \brief Use this for event-less / automatic transitions, or as hsm4c_run() event to only
+   * poll.
    *
-   * Automatic transitions are checked by sc_init() and after every sc_run() event, until
+   * Automatic transitions are checked by hsm4c_init() and after every hsm4c_run() event, until
    * none is enabled (SCXML semantics). Their guards are therefore polled until one becomes
    * true. Note: in UML, a completion transition is only checked once, when its source state
    * has been entered.
    */
-  SC_NO_EVENT = 0,
-} ScEvents;
+  HSM4C_NO_EVENT = 0,
+} hsm4c_reserved_event_t;
 
 /**
  * \brief Entry function prototype.
  *
- * \param s   State being entered.
+ * The state is already active when its entry function is called, its not yet entered
+ * descendants are not.
+ *
+ * \param sm      Machine.
+ * \param state   State being entered.
  */
-typedef void (*sc_entry_fn)(State const *s);
+typedef void (*hsm4c_entry_fn_t)(hsm4c_t *sm, hsm4c_state_id_t state);
 
 /**
  * \brief Run function prototype.
  *
- * Called by sc_run() for every state of the active branch, leaf first, whenever no automatic
+ * Called by hsm4c_run() for every state of the active branch, leaf first, whenever no automatic
  * transition is enabled: after the event was processed and again after each transition.
  *
- * \param s   State being run.
- * \param e   Event passed to sc_run().
+ * \param sm      Machine.
+ * \param state   State being run.
+ * \param event   Event passed to hsm4c_run(). Never NULL.
  *
- * \return    State to trigger an immediate external transition to. NULL, s itself or the
- *            current leaf state to not change state.
+ * \return        State to trigger an immediate external transition to. HSM4C_NO_STATE, the state
+ *                itself or the current leaf state to not change state.
  *
  * \attention Transitions triggered by run functions are not visible in the transition
  *            tables. Be careful with this.
  */
-typedef State *(*sc_run_fn)(State const *s, EventType e);
+typedef hsm4c_state_id_t (*hsm4c_run_fn_t)(hsm4c_t *sm, hsm4c_state_id_t state,
+                                           hsm4c_event_t const *event);
 
 /**
  * \brief Exit function prototype.
  *
- * \param s   State being exited.
+ * The state is still active when its exit function is called, its descendants are already
+ * exited.
+ *
+ * \param sm      Machine.
+ * \param state   State being exited.
  */
-typedef void (*sc_exit_fn)(State const *s);
+typedef void (*hsm4c_exit_fn_t)(hsm4c_t *sm, hsm4c_state_id_t state);
 
 /**
  * \brief Transition action prototype.
  *
- * \param root  Root state.
+ * Called after all exits and before all entries: only the states above the transition's
+ * common ancestor are active.
+ *
+ * \param sm      Machine.
+ * \param event   Event being processed. For automatic transitions the event passed to
+ *                hsm4c_run(), or an HSM4C_NO_EVENT event during hsm4c_init(). Never NULL.
  */
-typedef void (*sc_transition_fn)(State const *root);
+typedef void (*hsm4c_action_fn_t)(hsm4c_t *sm, hsm4c_event_t const *event);
 
 /**
  * \brief Guard prototype.
  *
- * \param root  Root state.
+ * \param sm      Machine.
+ * \param event   Event being processed, as for hsm4c_action_fn_t. Never NULL.
  *
- * \return      true if the transition should be taken, false otherwise.
+ * \return        true if the transition should be taken, false otherwise.
  */
-typedef bool (*sc_guard_fn)(State const *root);
+typedef bool (*hsm4c_guard_fn_t)(hsm4c_t const *sm, hsm4c_event_t const *event);
 
-/** \brief Transition. Use designated or positional initializers in transition tables. */
-struct Transition {
-  /**
-   * \brief Source state of the transition.
-   *
-   * In a state's own table it must be that state. In the root's table it can be any state.
-   */
-  State *const from;
-  /**
-   * \brief Target state of the transition. Must not be the root.
-   *
-   * NULL for a targetless (internal) transition: only the action is executed, no state is
-   * exited or entered.
-   */
-  State *const to;
-  /** \brief Event the transition reacts to. Must be positive or SC_NO_EVENT. */
-  EventType const event;
-  /** \brief Transition action. Called after all exits, before all entries. (optional) */
-  sc_transition_fn const transition_fn;
-  /** \brief Guard. Called when source and event match. NULL means always true. (optional) */
-  sc_guard_fn const guard_fn;
-  /** \brief Transition type. Default: SC_TTYPE_EXTERNAL. */
-  TransitionType type;
+/**
+ * \brief Transition table row. The source is the state owning the table.
+ *
+ * Positional initializers read as "on event, go to target, if guard, do action". Use designated
+ * initializers when compiling with HSM4C_CONFIG_GUARDS or HSM4C_CONFIG_ACTIONS set to 0.
+ */
+struct hsm4c_transition {
+  /** \brief Event the transition reacts to. Must be positive or HSM4C_NO_EVENT. */
+  hsm4c_event_id_t event;
+  /** \brief Target state. HSM4C_NO_STATE for an internal (targetless) transition. */
+  hsm4c_state_id_t to;
+#if HSM4C_CONFIG_GUARDS
+  /** \brief Guard. Called when the event matches. NULL means always true. (optional) */
+  hsm4c_guard_fn_t guard_fn;
+#endif
+#if HSM4C_CONFIG_ACTIONS
+  /** \brief Action. Called after all exits, before all entries. (optional) */
+  hsm4c_action_fn_t action_fn;
+#endif
+  /** \brief Transition type. Default: HSM4C_TRANSITION_EXTERNAL. */
+  hsm4c_transition_type_t type;
 };
 
 /** \brief Use this as last element of a transition table. */
-#define SC_TRANSITIONS_END                                                                         \
-  { .type = SC_TTYPE_TABLE_END }
+#define HSM4C_TRANSITIONS_END                                                                      \
+  { .type = HSM4C_TRANSITION_TABLE_END }
 
-/** \brief Constant state configuration. */
-struct StateConfig {
+/** \brief Constant state configuration. Element of a chart's state array. */
+struct hsm4c_state {
+#if HSM4C_CONFIG_STATE_NAMES
   /** \brief Name of the state. Not used by the library. (optional) */
   char const *name;
-  /** \brief Entry function. Called after the exits and the transition action. (optional) */
-  sc_entry_fn const entry_fn;
-  /** \brief Run function. Can trigger a transition. See sc_run_fn. (optional) */
-  sc_run_fn const run_fn;
-  /** \brief Exit function. Called after the guard, before the transition action. (optional) */
-  sc_exit_fn const exit_fn;
-  /** \brief Parent state. NULL only for the root state. (mandatory) */
-  State *const parent;
+#endif
+  /** \brief Parent state. Ignored for the root. Default: HSM4C_ROOT. */
+  hsm4c_state_id_t parent;
   /**
    * \brief Initial child state. Entered when this state is a transition target. (optional)
    *
    * For history states: the state entered when there is no history yet.
    */
-  State *const initial;
-  /** \brief State type. See StateType. Default: SC_TYPE_NORMAL. */
-  StateType type;
+  hsm4c_state_id_t initial;
+  /** \brief State type. See hsm4c_state_type_t. Default: HSM4C_STATE_NORMAL. */
+  hsm4c_state_type_t type;
+  /** \brief Entry function. Called after the exits and the transition action. (optional) */
+  hsm4c_entry_fn_t entry_fn;
+#if HSM4C_CONFIG_RUN_FN
+  /** \brief Run function. Can trigger a transition. See hsm4c_run_fn_t. (optional) */
+  hsm4c_run_fn_t run_fn;
+#endif
+  /** \brief Exit function. Called after the guard, before the transition action. (optional) */
+  hsm4c_exit_fn_t exit_fn;
   /**
-   * \brief Transition table, terminated by SC_TRANSITIONS_END. (optional)
+   * \brief Transition table, terminated by HSM4C_TRANSITIONS_END. (optional)
    *
    * The states of the active branch are searched from the leaf up to the root, so transitions
-   * of deeper states take priority. For each state, its own table is searched first, then the
-   * rows of the root's table with that state as source. Within a table, the first enabled row
-   * is taken.
+   * of deeper states take priority. Within a table, the first enabled row is taken.
    */
-  Transition const *transitions;
+  hsm4c_transition_t const *transitions;
 };
 
-/** \brief State. Holds the runtime data of a state. */
-struct State {
-  /** \brief Configuration. Set it with sc_map_stateconfig_to_states() or directly. */
-  StateConfig const *config;
+/** \brief Statechart: constant array of states, indexed by state ID. */
+struct hsm4c_chart {
+  /** \brief States. states[HSM4C_ROOT] is the root. */
+  hsm4c_state_t const *states;
+  /** \brief Number of states. */
+  hsm4c_state_id_t num_states;
+};
 
-  /**
-   * \brief Private. Active (or last active, for history) child state.
-   *
-   * On the root this is always the active leaf.
-   */
-  State *_active;
+/** \brief Defines a chart from an array of states, e.g. `hsm4c_chart_t c = HSM4C_CHART(s);` */
+#define HSM4C_CHART(states_array)                                                                  \
+  { (states_array), (hsm4c_state_id_t)(sizeof(states_array) / sizeof((states_array)[0])) }
+
+/** \brief Machine running a chart. All members are private, use the functions below. */
+struct hsm4c {
+  /** \brief Private. The chart. */
+  hsm4c_chart_t const *chart;
+  /** \brief Private. Active (or last active, for history) child per state. num_states entries. */
+  hsm4c_state_id_t *active;
+  /** \brief Private. Active leaf state. */
+  hsm4c_state_id_t leaf;
+  /** \brief Private. User context, see hsm4c_ctx(). */
+  void *ctx;
+  /** \brief Private. Internal event queue (ring buffer), see hsm4c_raise(). */
+  hsm4c_event_t queue[HSM4C_EVENT_QUEUE_SIZE];
+  /** \brief Private. Index of the oldest queued event. */
+  uint8_t queue_head;
+  /** \brief Private. Number of queued events. */
+  uint8_t queue_len;
+  /** \brief Private. True while hsm4c_init() or hsm4c_run() is processing. */
+  bool busy;
 };
 
 /**
- * \brief Initializes a statechart.
+ * \brief Checks a chart.
+ *
+ * hsm4c_init() calls it, so a valid chart can't make the machine misbehave. Rules:
+ * - Every state's parent exists, and parent chains reach the root without cycles. The root is
+ *   a normal state.
+ * - History and choice states have no children and no entry, exit or run functions.
+ * - A state's initial state is a direct child and not a history state.
+ * - History states have no transitions. Their initial state, if set, is a normal state below
+ *   their parent; otherwise their parent has an initial state.
+ * - Choice states have at least one transition, all automatic (HSM4C_NO_EVENT).
+ * - Transitions target existing states, have events >= 0 and a valid type.
+ *
+ * \param chart   Chart to check.
+ * \param state   Set to the first invalid state on error. Can be NULL.
+ *
+ * \return        HSM4C_OK or HSM4C_ERR_INVALID_CHART.
+ */
+hsm4c_result_t hsm4c_validate(hsm4c_chart_t const *chart, hsm4c_state_id_t *state);
+
+/**
+ * \brief Initializes a machine and starts the chart.
  *
  * Enters the root and its initial states down to a leaf, calling their entry functions,
- * then takes automatic transitions until none is enabled. Run functions are not called.
- * History of other states is kept. To reset it, call sc_reset_state() on all states.
+ * then takes automatic transitions and internal events until none is left. Run functions are
+ * not called. Calling it again restarts the chart and clears all history and queued events.
+ * Must not be called from a callback.
  *
- * \param root          Statechart root state.
+ * The chart is checked with hsm4c_validate() first. If it is invalid, HSM4C_ERR_INVALID_CHART
+ * is returned and the machine must not be used.
  *
- * \return              Active leaf state after init.
+ * \param sm      Machine to initialize.
+ * \param chart   Chart to run. Must outlive the machine.
+ * \param active  Runtime storage of `chart->num_states` elements. Must outlive the machine.
+ * \param ctx     User context for the callbacks, see hsm4c_ctx(). Can be NULL.
+ *
+ * \return        HSM4C_OK, or an error. The active state is available with hsm4c_current().
  */
-State const *sc_init(State *root);
-
-/** \brief Resets the given state, clearing its history. */
-void sc_reset_state(State *state);
-
-/** \brief Assigns statecfgs[i] to states[i]. For defining states and configs in tables. */
-#ifdef __cplusplus
-void sc_map_stateconfig_to_states(size_t num_states, State states[], StateConfig const statecfgs[]);
-#else
-void sc_map_stateconfig_to_states(size_t num_states, State states[num_states],
-                                  StateConfig const statecfgs[num_states]);
-#endif
+hsm4c_result_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_id_t *active,
+                          void *ctx);
 
 /**
- * \brief Runs one iteration of the statechart.
+ * \brief Processes one event.
  *
- * Takes the enabled transition for the event, if any. Then takes automatic transitions
- * until none is enabled. Whenever no automatic transition is enabled, the run functions of
- * the active branch are called, and can request a further transition.
+ * Processing order (SCXML):
+ * 1. Internal events raised since the last call, see hsm4c_raise().
+ * 2. The enabled transition for the event, if any.
+ * 3. Enabled automatic transitions, else queued internal events, until none is left.
+ * 4. When none is left, the run functions of the active branch. A requested state change
+ *    continues with 3.
  *
- * \param root    Statechart root state.
- * \param event   Event to pass to the statechart. Must be > 0, or SC_NO_EVENT to only poll.
+ * Calling it from a callback of the same machine returns HSM4C_ERR_BUSY and does nothing;
+ * use hsm4c_raise() instead.
  *
- * \return        Active leaf state after the iteration.
+ * Guards, actions and run functions receive the last processed event, also for automatic
+ * transitions (like SCXML's _event).
+ *
+ * \param sm      Machine.
+ * \param event   Event to process. Must be > 0, or HSM4C_NO_EVENT to only poll.
+ * \param data    User data passed with the event to the callbacks. Can be NULL.
+ *
+ * \return        HSM4C_OK, or an error. The active state is available with hsm4c_current().
  */
-State const *sc_run(State *root, EventType event);
+hsm4c_result_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event, void *data);
 
 /**
- * \brief Gets the root of any state.
+ * \brief Raises an internal event.
  *
- * \param s       State to search from.
+ * Called from a callback, the event is processed in the same hsm4c_run() or hsm4c_init()
+ * call, after the current transition and enabled automatic transitions, and before external
+ * events (SCXML internal event queue). Called outside, it is processed at the start of the next
+ * hsm4c_run().
  *
- * \return        Root state.
+ * \param sm      Machine.
+ * \param event   Event to raise. Must be > 0.
+ * \param data    User data passed with the event to the callbacks. Can be NULL.
+ *
+ * \return        HSM4C_OK, or HSM4C_ERR_QUEUE_FULL if HSM4C_EVENT_QUEUE_SIZE events are queued.
  */
-State const *sc_get_root(State const *s);
+hsm4c_result_t hsm4c_raise(hsm4c_t *sm, hsm4c_event_id_t event, void *data);
+
+/**
+ * \brief Gets the user context given to hsm4c_init().
+ *
+ * Use it in callbacks to reach application data.
+ *
+ * \param sm      Machine.
+ *
+ * \return        User context.
+ */
+void *hsm4c_ctx(hsm4c_t const *sm);
+
+/**
+ * \brief Gets the active leaf state.
+ *
+ * During a transition, i.e. in entry, exit and action callbacks, the deepest active state: states
+ * are exited and entered one by one.
+ *
+ * \param sm      Machine.
+ *
+ * \return        Active leaf state.
+ */
+hsm4c_state_id_t hsm4c_current(hsm4c_t const *sm);
+
+/**
+ * \brief Checks whether a state is active, i.e. the active leaf or one of its ancestors.
+ *
+ * Can be used in callbacks, see hsm4c_current().
+ *
+ * \param sm      Machine.
+ * \param state   State to check.
+ *
+ * \return        true if the state is active.
+ */
+bool hsm4c_is_active(hsm4c_t const *sm, hsm4c_state_id_t state);
 
 #ifdef __cplusplus
 }

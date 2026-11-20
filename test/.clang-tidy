@@ -1,0 +1,4 @@
+# Tests: the analyzer reports false memory leaks inside doctest's String class when CHECK
+# stringifies values (e.g. hsm4c_result_t). The library is still checked with it.
+InheritParentConfig: true
+Checks: -clang-analyzer-cplusplus.NewDeleteLeaks

@@ -11,181 +11,28 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#ifndef HSM4C_ASSERT
+#include <assert.h>
+/** \brief Checks for programming errors, e.g. NULL arguments. Define it to use your own. */
+#define HSM4C_ASSERT(expr) assert(expr)
+#endif
+
 /* -------- Private -------- */
 
-/** \brief Finds the common ancestor of two states. Both must be in the same tree. */
-static State *fca(State const *const left, State const *const right) {
-  for (State const *_left = left; _left->config->parent != NULL; _left = _left->config->parent) {
-    for (State const *_right = right; _right->config->parent != NULL;
-         _right = _right->config->parent) {
-      if (_left->config->parent == _right->config->parent) {
-        return _left->config->parent;
-      }
-    }
-  }
-  return NULL;
+/** \brief Configuration of a state. */
+static hsm4c_state_t const *cfg(hsm4c_t const *sm, hsm4c_state_id_t id) {
+  return &sm->chart->states[id];
 }
 
-/** \brief Walks up a branch and calls exit_fn(). end_ancestor MUST be a valid ancestor or NULL. */
-static void walk_up_exit(State const *start, State const *end_ancestor) {
-  for (; start != end_ancestor; start = start->config->parent) {
-    if (start->config->exit_fn) {
-      start->config->exit_fn(start);
-    }
-  }
-}
-
-/** \brief Walks up a branch and sets the active states to match the branch. end_ancestor MUST be
- * a valid ancestor or NULL. */
-static void walk_up_set_active_state(State *start, State const *end_ancestor) {
-  for (; start != end_ancestor; start = start->config->parent) {
-    start->config->parent->_active = start;
-  }
-}
-
-/** \brief Walks down a branch from start to end_child and calls entry_fn(). */
-static void walk_down_entry(State const *const start, State const *const end_child) {
-  if (!end_child || !start) {
-    return;
-  }
-
-  if (end_child != start) {
-    walk_down_entry(start, end_child->config->parent);
-  }
-
-  if (end_child && end_child->config->entry_fn) {
-    end_child->config->entry_fn(end_child);
-  }
-}
-
-/** \brief Walks down the initial states and sets them active. Returns the reached leaf. */
-static State *walk_down_init(State *start) {
-  for (; start->config->initial != NULL; start = start->config->initial) {
-    start->_active = start->config->initial;
-  }
-  start->_active = start->config->initial;
-  return start;
-}
-
-/** \brief Finds the current active leaf in a branch. */
-static State *find_leaf(State const *start) {
-  State const *leaf;
-  for (leaf = start; leaf->_active != NULL; leaf = leaf->_active) {
-  }
-  return (State *)leaf;
-}
-
-/** \brief Finds the root of the statechart. */
-static State *find_root(State const *start) {
-  State const *root = NULL;
-  for (root = start; root->config->parent != NULL; root = root->config->parent) {
-  }
-  return (State *)root;
-}
-
-/** \brief Finds the first enabled transition with source s and the given event in a table. */
-static Transition const *match_table(Transition const *table, State const *s, State const *root,
-                                     EventType event) {
-  if (!table) {
-    return NULL;
-  }
-  for (Transition const *t = table; t->type != SC_TTYPE_TABLE_END; ++t) {
-    if (t->from == s && t->event == event && (!t->guard_fn || t->guard_fn(root))) {
-      return t;
-    }
-  }
-  return NULL;
-}
-
-/**
- * \brief Finds an enabled transition for event in the active branch.
- *
- * States are searched from the active leaf up to the root, so deeper states take priority.
- * For each state its own table is searched first, then the root's table.
- */
-static Transition const *find_transition(State const *const root, EventType event) {
-  for (State const *s = root->_active; s != NULL; s = s->config->parent) {
-    Transition const *t = match_table(s->config->transitions, s, root, event);
-    if (!t && s != root) {
-      t = match_table(root->config->transitions, s, root, event);
-    }
-    if (t) {
-      return t;
-    }
-  }
-  return NULL;
-}
-
-/** \brief Runs a state. Returns the requested target state, NULL otherwise.
- * Returning the running state itself or the current leaf means "no change". */
-static State *run_state(State const *const root, State *s, EventType e) {
-  if (s->config->run_fn) {
-    State *target_state = s->config->run_fn(s, e);
-    if (target_state && target_state != s && target_state != root->_active) {
-      return target_state;
-    }
-  }
-  return NULL;
-}
-
-/** \brief See run_state. Does this for all states of the active branch, leaf first. */
-static State *ancestors_run(State const *root, EventType event) {
-  for (State *s = root->_active; s != NULL; s = s->config->parent) {
-    State *requested_state = run_state(root, s, event);
-    if (requested_state) {
-      return requested_state;
-    }
-  }
-  return NULL;
-}
-
-/** \brief Last active direct child of parent. The root stores the active leaf instead. */
-static State *active_child(State const *parent) {
-  if (parent->config->parent != NULL) {
-    return parent->_active;
-  }
-  State *s = parent->_active;
-  while (s != NULL && s->config->parent != parent) {
-    s = s->config->parent;
-  }
-  return s;
-}
-
-/** \brief Depending on target state type, return the real target state. */
-static State *get_target_state_from_type(State *to) {
-  State *const parent = to->config->parent;
-  State *fallback = NULL;
-  State *target_state = NULL;
-  switch (to->config->type) {
-  case SC_TYPE_NORMAL:
-  case SC_TYPE_CHOICE:
-    target_state = to;
-    break;
-  case SC_TYPE_HISTORY:
-  case SC_TYPE_HISTORY_DEEP:
-    fallback = to->config->initial ? to->config->initial : parent->config->initial;
-    if (to->config->type == SC_TYPE_HISTORY) {
-      target_state = active_child(parent);
-    } else {
-      target_state = find_leaf(parent);
-      if (target_state == parent) {
-        target_state = NULL;
-      }
-    }
-    if (!target_state) {
-      target_state = fallback;
-    }
-    break;
-  case SC_TYPE_ROOT:
-    target_state = NULL;
-    break;
-  }
-  return target_state;
+/** \brief Parent of a state. Must not be called for the root. */
+static hsm4c_state_id_t parent_of(hsm4c_t const *sm, hsm4c_state_id_t id) {
+  return cfg(sm, id)->parent;
 }
 
 /** \brief Returns true if s is a proper descendant of ancestor. */
-static bool is_descendant(State const *s, State const *ancestor) {
-  for (s = s->config->parent; s != NULL; s = s->config->parent) {
+static bool is_descendant(hsm4c_t const *sm, hsm4c_state_id_t s, hsm4c_state_id_t ancestor) {
+  while (s != HSM4C_ROOT) {
+    s = parent_of(sm, s);
     if (s == ancestor) {
       return true;
     }
@@ -193,112 +40,495 @@ static bool is_descendant(State const *s, State const *ancestor) {
   return false;
 }
 
-/** \brief Executes a single transition from the active leaf. */
-static void execute_transition(State *root, State *from, State *to, TransitionType type,
-                               sc_transition_fn action) {
-  // Handle StateType
-  State *target_state = to ? get_target_state_from_type(to) : NULL;
+/**
+ * \brief Least common compound ancestor: the nearest proper ancestor of source that is also a
+ * proper ancestor of target. The root if source is the root.
+ */
+static hsm4c_state_id_t lcca(hsm4c_t const *sm, hsm4c_state_id_t source, hsm4c_state_id_t target) {
+  hsm4c_state_id_t s = source;
+  while (s != HSM4C_ROOT) {
+    s = parent_of(sm, s);
+    if (is_descendant(sm, target, s)) {
+      return s;
+    }
+  }
+  return HSM4C_ROOT;
+}
 
-  // Targetless or local "Same -> Same": internal transition. No exit/entry, nothing changes.
-  if (!target_state || (type == SC_TTYPE_LOCAL && from == target_state)) {
+/** \brief Finds the active (or last active) leaf below a state. */
+static hsm4c_state_id_t find_leaf(hsm4c_t const *sm, hsm4c_state_id_t s) {
+  while (sm->active[s] != HSM4C_NO_STATE) {
+    s = sm->active[s];
+  }
+  return s;
+}
+
+/** \brief Calls the entry function of a state, if any. */
+static void enter(hsm4c_t *sm, hsm4c_state_id_t s) {
+  if (cfg(sm, s)->entry_fn) {
+    cfg(sm, s)->entry_fn(sm, s);
+  }
+}
+
+/** \brief Calls the exit function of a state, if any. */
+static void leave(hsm4c_t *sm, hsm4c_state_id_t s) {
+  if (cfg(sm, s)->exit_fn) {
+    cfg(sm, s)->exit_fn(sm, s);
+  }
+}
+
+/**
+ * \brief Enters the initial states below the active leaf s down to a leaf.
+ *
+ * Each state is active before its entry function is called (SCXML).
+ */
+static void enter_initial(hsm4c_t *sm, hsm4c_state_id_t s) {
+  while (cfg(sm, s)->initial != HSM4C_NO_STATE) {
+    sm->active[s] = cfg(sm, s)->initial;
+    s = cfg(sm, s)->initial;
+    sm->leaf = s;
+    enter(sm, s);
+  }
+  sm->active[s] = HSM4C_NO_STATE;
+}
+
+/** \brief Depending on the target's type, returns the state to actually enter. */
+static hsm4c_state_id_t resolve_target(hsm4c_t const *sm, hsm4c_state_id_t to) {
+  hsm4c_state_t const *const to_cfg = cfg(sm, to);
+  hsm4c_state_id_t const parent = to_cfg->parent;
+  hsm4c_state_id_t target = to;
+
+  if (to_cfg->type == HSM4C_STATE_HISTORY) {
+    target = sm->active[parent];
+  } else if (to_cfg->type == HSM4C_STATE_HISTORY_DEEP) {
+    target = find_leaf(sm, parent);
+    if (target == parent) {
+      target = HSM4C_NO_STATE;
+    }
+  }
+
+  if (target == HSM4C_NO_STATE) {
+    // History without history: own initial, then the parent's
+    target = to_cfg->initial != HSM4C_NO_STATE ? to_cfg->initial : cfg(sm, parent)->initial;
+  }
+  return target;
+}
+
+/** \brief Executes a single transition from the active leaf. */
+static void execute_transition(hsm4c_t *sm, hsm4c_state_id_t from, hsm4c_state_id_t to,
+                               hsm4c_transition_type_t type, hsm4c_action_fn_t action,
+                               hsm4c_event_t const *event) {
+  hsm4c_state_id_t const target = to != HSM4C_NO_STATE ? resolve_target(sm, to) : HSM4C_NO_STATE;
+
+  // Targetless: internal transition. No exit/entry, nothing changes.
+  if (target == HSM4C_NO_STATE) {
     if (action) {
-      action(root);
+      action(sm, event);
     }
     return;
   }
 
-  // Transition domain: A local transition into a descendant does not exit its source.
-  // Otherwise (also local with any other target) the common ancestor of source and target.
-  State *domain = (type == SC_TTYPE_LOCAL && is_descendant(target_state, from))
-                      ? from
-                      : fca(from, target_state);
+  // Transition domain: a local transition into a descendant does not exit its source.
+  // Otherwise (also local with any other target, including the source itself) the common
+  // ancestor of source and target.
+  hsm4c_state_id_t const domain =
+      (type == HSM4C_TRANSITION_LOCAL && is_descendant(sm, target, from)) ? from
+                                                                          : lcca(sm, from, target);
 
-  // The root is never exited, e.g. for transitions with the root as source
-  if (!domain) {
-    domain = root;
+  // Exit all states on the active branch below the domain, leaf first. Each state is active
+  // while its exit function is called (SCXML).
+  while (sm->leaf != domain) {
+    leave(sm, sm->leaf);
+    sm->leaf = parent_of(sm, sm->leaf);
   }
 
-  State *from_leaf = root->_active;
-
-  // Set target branch active states to reach target
-  walk_up_set_active_state(target_state, domain);
-
-  // Exit all states on the active branch below the domain
-  walk_up_exit(from_leaf, domain);
+  // Set the target branch active below the domain
+  for (hsm4c_state_id_t s = target; s != domain; s = parent_of(sm, s)) {
+    sm->active[parent_of(sm, s)] = s;
+  }
 
   // Transition
   if (action) {
-    action(root);
+    action(sm, event);
   }
 
-  // Enter target branch incl. target
-  walk_down_entry(domain->_active, target_state);
+  // Enter the target branch down to the target. Each state is active before its entry function
+  // is called (SCXML).
+  do {
+    sm->leaf = sm->active[sm->leaf];
+    enter(sm, sm->leaf);
+  } while (sm->leaf != target);
 
-  // The target might not be initialized yet
-  State *leaf = walk_down_init(target_state);
-
-  // Enter initial states down to the leaf
-  walk_down_entry(target_state->_active, leaf);
-  root->_active = leaf;
+  // Enter initial states down to a leaf
+  enter_initial(sm, target);
 }
 
-/** \brief Executes a transition table row. */
-static void take_transition(State *root, Transition const *t) {
-  execute_transition(root, t->from, t->to, t->type, t->transition_fn);
+/** \brief Evaluates the guard of a transition. No guard means enabled. */
+static bool guard_ok(hsm4c_t const *sm, hsm4c_transition_t const *t, hsm4c_event_t const *event) {
+#if HSM4C_CONFIG_GUARDS
+  return !t->guard_fn || t->guard_fn(sm, event);
+#else
+  (void)sm;
+  (void)t;
+  (void)event;
+  return true;
+#endif
+}
+
+/** \brief Action of a transition, NULL if none. */
+static hsm4c_action_fn_t action_of(hsm4c_transition_t const *t) {
+#if HSM4C_CONFIG_ACTIONS
+  return t->action_fn;
+#else
+  (void)t;
+  return NULL;
+#endif
+}
+
+/** \brief Finds an enabled transition for event in the active branch, deepest state first. */
+static hsm4c_transition_t const *find_transition(hsm4c_t const *sm, hsm4c_event_id_t id,
+                                                 hsm4c_event_t const *event,
+                                                 hsm4c_state_id_t *source) {
+  hsm4c_state_id_t s = sm->leaf;
+  for (;;) {
+    hsm4c_transition_t const *t = cfg(sm, s)->transitions;
+    for (; t && t->type != HSM4C_TRANSITION_TABLE_END; ++t) {
+      if (t->event == id && guard_ok(sm, t, event)) {
+        *source = s;
+        return t;
+      }
+    }
+    if (s == HSM4C_ROOT) {
+      return NULL;
+    }
+    s = parent_of(sm, s);
+  }
 }
 
 /**
- * \brief Takes automatic transitions until none is enabled.
+ * \brief Calls the run functions of the active branch, leaf first.
  *
- * With run_fns, run functions are called whenever no automatic transition is enabled and can
- * request further transitions.
+ * \return The first requested state change, HSM4C_NO_STATE if none.
  */
-static void settle(State *root, EventType event, bool run_fns) {
+static hsm4c_state_id_t run_states(hsm4c_t *sm, hsm4c_event_t const *event) {
+#if !HSM4C_CONFIG_RUN_FN
+  (void)sm;
+  (void)event;
+  return HSM4C_NO_STATE;
+#else
+  hsm4c_state_id_t s = sm->leaf;
   for (;;) {
-    Transition const *t = find_transition(root, SC_NO_EVENT);
+    if (cfg(sm, s)->run_fn) {
+      hsm4c_state_id_t const target = cfg(sm, s)->run_fn(sm, s, event);
+      if (target != HSM4C_NO_STATE && target != s && target != sm->leaf) {
+        return target;
+      }
+    }
+    if (s == HSM4C_ROOT) {
+      return HSM4C_NO_STATE;
+    }
+    s = parent_of(sm, s);
+  }
+#endif
+}
+
+/**
+ * \brief Executes a transition, counted against HSM4C_MAX_TRANSITIONS.
+ *
+ * \return HSM4C_ERR_LIMIT without executing it if the limit is reached.
+ */
+static hsm4c_result_t take(hsm4c_t *sm, hsm4c_state_id_t from, hsm4c_state_id_t to,
+                           hsm4c_transition_type_t type, hsm4c_action_fn_t action,
+                           hsm4c_event_t const *event, unsigned *taken) {
+  // Stop endless chains of transitions, e.g. a cycle of always enabled automatic transitions
+  if (*taken >= HSM4C_MAX_TRANSITIONS) {
+    return HSM4C_ERR_LIMIT;
+  }
+  ++*taken;
+  execute_transition(sm, from, to, type, action, event);
+  return HSM4C_OK;
+}
+
+/** \brief Takes the transition for event, if one is enabled. */
+static hsm4c_result_t take_event(hsm4c_t *sm, hsm4c_event_t const *event, unsigned *taken) {
+  hsm4c_state_id_t source = HSM4C_ROOT;
+  hsm4c_transition_t const *const t = find_transition(sm, event->id, event, &source);
+  if (!t) {
+    return HSM4C_OK;
+  }
+  return take(sm, source, t->to, t->type, action_of(t), event, taken);
+}
+
+/**
+ * \brief Takes automatic transitions and internal events until none is left.
+ *
+ * Order per step (SCXML): an enabled automatic transition, else the oldest internal event.
+ * With run_fns, run functions are called when neither is left and can request further
+ * transitions.
+ *
+ * \param event   Last processed event, passed to the callbacks. Updated by internal events.
+ * \param taken   Transitions taken in this call, counted against HSM4C_MAX_TRANSITIONS.
+ */
+static hsm4c_result_t settle(hsm4c_t *sm, hsm4c_event_t *event, bool run_fns, unsigned *taken) {
+  for (;;) {
+    hsm4c_state_id_t source = HSM4C_ROOT;
+    hsm4c_transition_t const *const t = find_transition(sm, HSM4C_NO_EVENT, event, &source);
     if (t) {
-      take_transition(root, t);
+      hsm4c_result_t const r = take(sm, source, t->to, t->type, action_of(t), event, taken);
+      if (r != HSM4C_OK) {
+        return r;
+      }
       continue;
     }
+
+    if (sm->queue_len > 0) {
+      hsm4c_event_t const next = sm->queue[sm->queue_head];
+      hsm4c_result_t const r = take_event(sm, &next, taken);
+      if (r != HSM4C_OK) {
+        return r; // The event stays queued
+      }
+      sm->queue_head = (uint8_t)((sm->queue_head + 1U) % HSM4C_EVENT_QUEUE_SIZE);
+      --sm->queue_len;
+      *event = next;
+      continue;
+    }
+
     if (!run_fns) {
-      return;
+      return HSM4C_OK;
     }
-    State *run_target = ancestors_run(root, event);
-    if (!run_target) {
-      return;
+    hsm4c_state_id_t const run_target = run_states(sm, event);
+    if (run_target == HSM4C_NO_STATE) {
+      return HSM4C_OK;
     }
-    execute_transition(root, root->_active, run_target, SC_TTYPE_EXTERNAL, NULL);
+    if (run_target >= sm->chart->num_states) {
+      return HSM4C_ERR_INVALID_STATE;
+    }
+    hsm4c_result_t const r =
+        take(sm, sm->leaf, run_target, HSM4C_TRANSITION_EXTERNAL, NULL, event, taken);
+    if (r != HSM4C_OK) {
+      return r;
+    }
   }
+}
+
+/** \brief Returns true for history and choice pseudo states. */
+static bool is_pseudo(hsm4c_state_t const *state) { return state->type != HSM4C_STATE_NORMAL; }
+
+/** \brief Checks the parent chain of a state: valid IDs, no cycles, no pseudo state parents. */
+static bool parents_valid(hsm4c_chart_t const *chart, hsm4c_state_id_t id) {
+  hsm4c_state_id_t s = id;
+  // A valid chain reaches the root in fewer than num_states steps
+  for (hsm4c_state_id_t steps = 0; steps < chart->num_states; ++steps) {
+    if (s == HSM4C_ROOT) {
+      return true;
+    }
+    hsm4c_state_id_t const parent = chart->states[s].parent;
+    // The root's own type is checked by state_valid()
+    if (parent >= chart->num_states ||
+        (parent != HSM4C_ROOT && is_pseudo(&chart->states[parent]))) {
+      return false;
+    }
+    s = parent;
+  }
+  return false;
+}
+
+/** \brief Returns true if s is a proper descendant of ancestor. Parents must be valid. */
+static bool chart_is_descendant(hsm4c_chart_t const *chart, hsm4c_state_id_t s,
+                                hsm4c_state_id_t ancestor) {
+  while (s != HSM4C_ROOT) {
+    s = chart->states[s].parent;
+    if (s == ancestor) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** \brief Checks the transition table of a state. */
+static bool transitions_valid(hsm4c_chart_t const *chart, hsm4c_state_t const *state) {
+  hsm4c_transition_t const *t = state->transitions;
+  for (; t && t->type != HSM4C_TRANSITION_TABLE_END; ++t) {
+    if (t->to >= chart->num_states || t->event < 0 ||
+        (t->type != HSM4C_TRANSITION_EXTERNAL && t->type != HSM4C_TRANSITION_LOCAL)) {
+      return false;
+    }
+    if (state->type == HSM4C_STATE_CHOICE && t->event != HSM4C_NO_EVENT) {
+      return false;
+    }
+  }
+  // Choice states need at least one transition
+  return state->type != HSM4C_STATE_CHOICE || (state->transitions && t != state->transitions);
+}
+
+/** \brief Checks one state. Parents of all states must already be valid. */
+static bool state_valid(hsm4c_chart_t const *chart, hsm4c_state_id_t id) {
+  hsm4c_state_t const *const state = &chart->states[id];
+
+  if (state->type != HSM4C_STATE_NORMAL && state->type != HSM4C_STATE_HISTORY &&
+      state->type != HSM4C_STATE_HISTORY_DEEP && state->type != HSM4C_STATE_CHOICE) {
+    return false;
+  }
+  if (id == HSM4C_ROOT && is_pseudo(state)) {
+    return false;
+  }
+  if (is_pseudo(state) && (state->entry_fn || state->exit_fn)) {
+    return false;
+  }
+#if HSM4C_CONFIG_RUN_FN
+  if (is_pseudo(state) && state->run_fn) {
+    return false;
+  }
+#endif
+  if (state->initial >= chart->num_states) {
+    return false;
+  }
+
+  if (state->type == HSM4C_STATE_HISTORY || state->type == HSM4C_STATE_HISTORY_DEEP) {
+    // Histories have no transitions and need a fallback: own initial, else the parent's
+    if (state->transitions && state->transitions->type != HSM4C_TRANSITION_TABLE_END) {
+      return false;
+    }
+    if (state->initial == HSM4C_NO_STATE) {
+      return chart->states[state->parent].initial != HSM4C_NO_STATE;
+    }
+    return chart_is_descendant(chart, state->initial, state->parent) &&
+           !is_pseudo(&chart->states[state->initial]);
+  }
+
+  // Initial state: a direct child, not a history
+  if (state->initial != HSM4C_NO_STATE) {
+    hsm4c_state_t const *const initial = &chart->states[state->initial];
+    if (initial->parent != id || initial->type == HSM4C_STATE_HISTORY ||
+        initial->type == HSM4C_STATE_HISTORY_DEEP) {
+      return false;
+    }
+  }
+
+  return transitions_valid(chart, state);
 }
 
 /* -------- Public -------- */
 
-State const *sc_init(State *root) {
-  root->_active = walk_down_init(root);
-  walk_down_entry(root, root->_active);
-  settle(root, SC_NO_EVENT, false);
-  return root->_active;
-}
-
-void sc_map_stateconfig_to_states(size_t num_states, State states[num_states],
-                                  StateConfig const statecfgs[num_states]) {
-  for (size_t i = 0; i < num_states; ++i) {
-    states[i].config = &statecfgs[i];
-  }
-}
-
-void sc_reset_state(State *state) { state->_active = NULL; }
-
-State const *sc_get_root(State const *s) { return find_root(s); }
-
-State const *sc_run(State *root, EventType event) {
-  // Event transitions first, automatic transitions afterwards (SCXML macrostep)
-  Transition const *t = event != SC_NO_EVENT ? find_transition(root, event) : NULL;
-  if (t) {
-    take_transition(root, t);
+hsm4c_result_t hsm4c_validate(hsm4c_chart_t const *chart, hsm4c_state_id_t *state) {
+  if (!chart || !chart->states || chart->num_states == 0) {
+    if (state) {
+      *state = HSM4C_ROOT;
+    }
+    return HSM4C_ERR_INVALID_CHART;
   }
 
-  settle(root, event, true);
+  // Parents first: the other checks walk the parent chains
+  for (hsm4c_state_id_t pass = 0; pass < 2; ++pass) {
+    for (hsm4c_state_id_t id = 0; id < chart->num_states; ++id) {
+      bool const valid = pass == 0 ? parents_valid(chart, id) : state_valid(chart, id);
+      if (!valid) {
+        if (state) {
+          *state = id;
+        }
+        return HSM4C_ERR_INVALID_CHART;
+      }
+    }
+  }
+  return HSM4C_OK;
+}
 
-  return root->_active;
+hsm4c_result_t hsm4c_init(hsm4c_t *sm, hsm4c_chart_t const *chart, hsm4c_state_id_t *active,
+                          void *ctx) {
+  HSM4C_ASSERT(sm && chart && active);
+#if HSM4C_CONFIG_VALIDATE
+  hsm4c_result_t const valid = hsm4c_validate(chart, NULL);
+  if (valid != HSM4C_OK) {
+    return valid;
+  }
+#endif
+
+  sm->chart = chart;
+  sm->active = active;
+  sm->ctx = ctx;
+  sm->queue_head = 0;
+  sm->queue_len = 0;
+  sm->busy = true;
+  for (hsm4c_state_id_t i = 0; i < chart->num_states; ++i) {
+    active[i] = HSM4C_NO_STATE;
+  }
+
+  sm->leaf = HSM4C_ROOT;
+  enter(sm, HSM4C_ROOT);
+  enter_initial(sm, HSM4C_ROOT);
+
+  hsm4c_event_t current = {HSM4C_NO_EVENT, NULL};
+  unsigned taken = 0;
+  hsm4c_result_t const r = settle(sm, &current, false, &taken);
+  sm->busy = false;
+  return r;
+}
+
+hsm4c_result_t hsm4c_run(hsm4c_t *sm, hsm4c_event_id_t event, void *data) {
+  HSM4C_ASSERT(sm && sm->chart);
+  HSM4C_ASSERT(event >= 0);
+  if (sm->busy) {
+    return HSM4C_ERR_BUSY;
+  }
+  sm->busy = true;
+
+  hsm4c_event_t current = {HSM4C_NO_EVENT, NULL};
+  unsigned taken = 0;
+
+  // Internal events raised outside of a call come before the new event (SCXML)
+  hsm4c_result_t r = sm->queue_len > 0 ? settle(sm, &current, false, &taken) : HSM4C_OK;
+
+  // The event's transition first, then automatic transitions and internal events. The event's
+  // own transition is not counted: a single transition is no chain.
+  if (r == HSM4C_OK) {
+    current.id = event;
+    current.data = data;
+    hsm4c_state_id_t source = HSM4C_ROOT;
+    hsm4c_transition_t const *const t =
+        event != HSM4C_NO_EVENT ? find_transition(sm, event, &current, &source) : NULL;
+    if (t) {
+      execute_transition(sm, source, t->to, t->type, action_of(t), &current);
+    }
+    r = settle(sm, &current, true, &taken);
+  }
+
+  sm->busy = false;
+  return r;
+}
+
+hsm4c_result_t hsm4c_raise(hsm4c_t *sm, hsm4c_event_id_t event, void *data) {
+  HSM4C_ASSERT(sm);
+  HSM4C_ASSERT(event > 0);
+  if (sm->queue_len >= HSM4C_EVENT_QUEUE_SIZE) {
+    return HSM4C_ERR_QUEUE_FULL;
+  }
+  unsigned const tail = (sm->queue_head + sm->queue_len) % HSM4C_EVENT_QUEUE_SIZE;
+  sm->queue[tail].id = event;
+  sm->queue[tail].data = data;
+  ++sm->queue_len;
+  return HSM4C_OK;
+}
+
+void *hsm4c_ctx(hsm4c_t const *sm) {
+  HSM4C_ASSERT(sm);
+  return sm->ctx;
+}
+
+hsm4c_state_id_t hsm4c_current(hsm4c_t const *sm) {
+  HSM4C_ASSERT(sm);
+  return sm->leaf;
+}
+
+bool hsm4c_is_active(hsm4c_t const *sm, hsm4c_state_id_t state) {
+  HSM4C_ASSERT(sm && state < sm->chart->num_states);
+  hsm4c_state_id_t s = sm->leaf;
+  for (;;) {
+    if (s == state) {
+      return true;
+    }
+    if (s == HSM4C_ROOT) {
+      return false;
+    }
+    s = parent_of(sm, s);
+  }
 }
