@@ -224,11 +224,11 @@ typedef enum hsm4c_transition_type {
   /**
    * \brief Local transition (SCXML type="internal").
    *
-   * - Target is a descendant of the source: the source is not exited, only its active
+   * - Target is a proper descendant of the source: the source is not exited, only its active
    *   substates are.
-   * - Target is the source ("Same -> Same"): internal transition, same as
-   *   `to == HSM4C_NO_STATE`.
-   * - Any other target: behaves like an external transition.
+   * - Any other target, including the source itself: behaves like an external transition.
+   *
+   * For an internal transition, which exits and enters nothing, use `to = HSM4C_NO_STATE`.
    */
   HSM4C_TRANSITION_LOCAL,
 

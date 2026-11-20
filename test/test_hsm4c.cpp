@@ -316,15 +316,16 @@ TEST_CASE_FIXTURE(Fixture, "AAB to AA local behaves as external") {
         Log{"guard", "-AAB", "-AA", "act", "+AA", "+AAA"} + runs({AAA, AA, A, ROOT}, EV_12));
 }
 
-TEST_CASE_FIXTURE(Fixture, "AAA to AAA internal") {
+TEST_CASE_FIXTURE(Fixture, "AAA to AAA local behaves as external") {
   prepare();
-  CHECK(run(EV_11) == Log{"guard", "act"} + runs({AAA, AA, A, ROOT}, EV_11));
+  CHECK(run(EV_11) == Log{"guard", "-AAA", "act", "+AAA"} + runs({AAA, AA, A, ROOT}, EV_11));
 }
 
-TEST_CASE_FIXTURE(Fixture, "A to A internal on composite state") {
+TEST_CASE_FIXTURE(Fixture, "A to A local on composite state behaves as external") {
   prepare();
-  // Must not exit/enter any substate.
-  CHECK(run(EV_13) == Log{"guard", "act"} + runs({AAA, AA, A, ROOT}, EV_13));
+  // The target is not a proper descendant of the source (SCXML)
+  CHECK(run(EV_13) == Log{"guard", "-AAA", "-AA", "-A", "act", "+A", "+AA", "+AAA"} +
+                          runs({AAA, AA, A, ROOT}, EV_13));
   CHECK(last == AAA);
 }
 

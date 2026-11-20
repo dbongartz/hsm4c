@@ -120,8 +120,8 @@ static void execute_transition(hsm4c_t *sm, hsm4c_state_id_t from, hsm4c_state_i
                                hsm4c_event_t const *event) {
   hsm4c_state_id_t const target = to != HSM4C_NO_STATE ? resolve_target(sm, to) : HSM4C_NO_STATE;
 
-  // Targetless or local "Same -> Same": internal transition. No exit/entry, nothing changes.
-  if (target == HSM4C_NO_STATE || (type == HSM4C_TRANSITION_LOCAL && from == target)) {
+  // Targetless: internal transition. No exit/entry, nothing changes.
+  if (target == HSM4C_NO_STATE) {
     if (action) {
       action(sm, event);
     }
@@ -129,7 +129,8 @@ static void execute_transition(hsm4c_t *sm, hsm4c_state_id_t from, hsm4c_state_i
   }
 
   // Transition domain: a local transition into a descendant does not exit its source.
-  // Otherwise (also local with any other target) the common ancestor of source and target.
+  // Otherwise (also local with any other target, including the source itself) the common
+  // ancestor of source and target.
   hsm4c_state_id_t const domain =
       (type == HSM4C_TRANSITION_LOCAL && is_descendant(sm, target, from)) ? from
                                                                           : lcca(sm, from, target);
