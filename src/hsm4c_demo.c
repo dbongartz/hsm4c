@@ -4,7 +4,7 @@
 
 /* ========================== */
 enum my_states { ROOT, A, A_H, A_HD, BRANCH, B, C, D, D_H, E, F, G, G_HD, GA, GB, _NUM_STATES };
-static State my_states[];
+static State my_states[_NUM_STATES];
 
 static void state_a_entry(State const *sm) { printf("%s\n", __func__); }
 static void state_a_exit(State const *sm) { printf("%s\n", __func__); }

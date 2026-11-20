@@ -3,6 +3,5 @@
     "clangd.arguments": [
         "-pretty",
         "--background-index",
-    ],
-    "ceedlingExplorer.debugConfiguration": "Ceedling Test Explorer Debug"
+    ]
 }

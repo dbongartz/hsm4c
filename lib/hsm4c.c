@@ -27,7 +27,7 @@ static State *fca(State const *const left, State const *const right) {
 }
 
 /** \brief Walk up a branch and call exit_fn(). end_ancestor MUST be a valid ancestor or NULL. */
-static void walk_up_exit(State const *const root, State const *start, State const *end_ancestor) {
+static void walk_up_exit(State const *start, State const *end_ancestor) {
   for (; start != end_ancestor; start = start->config->parent) {
     if (start->config->exit_fn) {
       start->config->exit_fn(start);
@@ -211,7 +211,7 @@ static void execute_transition(State *root, State const *from, State *to, Transi
   }
 
   // Exit all states on the active branch until ancestor
-  walk_up_exit(root, from_leaf, ca);
+  walk_up_exit(from_leaf, ca);
 
   // Transition
   if (action) {

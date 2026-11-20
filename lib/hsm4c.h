@@ -29,6 +29,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct State State;
 typedef struct StateConfig StateConfig;
 typedef struct Transition Transition;
@@ -211,8 +215,12 @@ State const *sc_init(State *root);
 void sc_reset_state(State *state);
 
 /** \brief Map StateConfigs and State if using tables to define them */
+#ifdef __cplusplus
+void sc_map_stateconfig_to_states(size_t num_states, State states[], StateConfig const statecfgs[]);
+#else
 void sc_map_stateconfig_to_states(size_t num_states, State states[num_states],
                                   StateConfig const statecfgs[num_states]);
+#endif
 
 /**
  * \brief Runs one iteration of the statechart
@@ -234,3 +242,7 @@ State const *sc_run(State *root, EventType event);
  * \return        Root state.
  */
 State const *sc_get_root(State const *s);
+
+#ifdef __cplusplus
+}
+#endif
