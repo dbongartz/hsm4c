@@ -13,7 +13,7 @@
 
 /* -------- Private -------- */
 
-/** \brief Find common ancestor of two states. Must be same tree. */
+/** \brief Finds the common ancestor of two states. Both must be in the same tree. */
 static State *fca(State const *const left, State const *const right) {
   for (State const *_left = left; _left->config->parent != NULL; _left = _left->config->parent) {
     for (State const *_right = right; _right->config->parent != NULL;
@@ -26,7 +26,7 @@ static State *fca(State const *const left, State const *const right) {
   return NULL;
 }
 
-/** \brief Walk up a branch and call exit_fn(). end_ancestor MUST be a valid ancestor or NULL. */
+/** \brief Walks up a branch and calls exit_fn(). end_ancestor MUST be a valid ancestor or NULL. */
 static void walk_up_exit(State const *start, State const *end_ancestor) {
   for (; start != end_ancestor; start = start->config->parent) {
     if (start->config->exit_fn) {
@@ -35,15 +35,15 @@ static void walk_up_exit(State const *start, State const *end_ancestor) {
   }
 }
 
-/** \brief Walk up a branch and set active state to match the branch. end_ancestor MUST be a valid
- * ancestor or NULL. */
+/** \brief Walks up a branch and sets the active states to match the branch. end_ancestor MUST be
+ * a valid ancestor or NULL. */
 static void walk_up_set_active_state(State *start, State const *end_ancestor) {
   for (; start != end_ancestor; start = start->config->parent) {
     start->config->parent->_active = start;
   }
 }
 
-/** \brief Walk down a branch and call entry_fn(). */
+/** \brief Walks down a branch from start to end_child and calls entry_fn(). */
 static void walk_down_entry(State const * const start, State const * const end_child) {
   if (!end_child || !start) {
     return;
@@ -58,7 +58,7 @@ static void walk_down_entry(State const * const start, State const * const end_c
   }
 }
 
-/** \brief Walk down a branch and set initial state to active if present. */
+/** \brief Walks down the initial states and sets them active. Returns the reached leaf. */
 static State *walk_down_init(State *start) {
   for (; start->config->initial != NULL; start = start->config->initial) {
     start->_active = start->config->initial;
@@ -67,7 +67,7 @@ static State *walk_down_init(State *start) {
   return start;
 }
 
-/** \brief Finds current active leaf in a branch. */
+/** \brief Finds the current active leaf in a branch. */
 static State *find_leaf(State const *start) {
   State const *leaf;
   for (leaf = start; leaf->_active != NULL; leaf = leaf->_active) {
@@ -75,7 +75,7 @@ static State *find_leaf(State const *start) {
   return (State *)leaf;
 }
 
-/** \brief Finds root of statechart */
+/** \brief Finds the root of the statechart. */
 static State *find_root(State const *start) {
   State const *root = NULL;
   for (root = start; root->config->parent != NULL; root = root->config->parent) {
@@ -83,7 +83,7 @@ static State *find_root(State const *start) {
   return (State *)root;
 }
 
-/** \brief Finds valid (matching or automatic) transition in active branch. */
+/** \brief Finds a valid (matching or automatic) transition in the active branch. */
 static Transition const *find_transition(State const *const root, EventType event) {
   Transition const *transitions = root->config->transitions;
 
@@ -116,7 +116,7 @@ static Transition const *find_transition(State const *const root, EventType even
   return NULL;
 }
 
-/** \brief run active state, return if a new state got returned, NULL otherwise.
+/** \brief Runs a state. Returns the requested target state, NULL otherwise.
  * Returning the running state itself or the current leaf means "no change". */
 static State *run_state(State const *const root, State *s, EventType e) {
   if (s->config->run_fn) {
@@ -128,7 +128,7 @@ static State *run_state(State const *const root, State *s, EventType e) {
   return NULL;
 }
 
-/** \brief See run_state. Do this for all states in a branch.  */
+/** \brief See run_state. Does this for all states of the active branch, leaf first. */
 static State *ancestors_run(State const *root, EventType event) {
   for (State *s = root->_active; s != NULL; s = s->config->parent) {
     State *requested_state = run_state(root, s, event);
@@ -139,7 +139,7 @@ static State *ancestors_run(State const *root, EventType event) {
   return NULL;
 }
 
-/** \brief Last active direct child of parent. The root node stores the active leaf instead. */
+/** \brief Last active direct child of parent. The root stores the active leaf instead. */
 static State *active_child(State const *parent) {
   if (parent->config->parent != NULL) {
     return parent->_active;
@@ -183,7 +183,7 @@ static State *get_target_state_from_type(State *to) {
   return target_state;
 }
 
-/** \brief Execute a single transition from the active leaf. */
+/** \brief Executes a single transition from the active leaf. */
 static void execute_transition(State *root, State const *from, State *to, TransitionType type,
                                transition_fn action) {
   // Handle StateType
@@ -218,15 +218,15 @@ static void execute_transition(State *root, State const *from, State *to, Transi
     action(root);
   }
 
-  // Entry target branch incl. target (target not re-entered if it is the local container)
+  // Enter target branch incl. target (target not re-entered if it is the local container)
   if (ca != target_state) {
     walk_down_entry(ca->_active, target_state);
   }
 
-  // We might have not initialized this state yet
+  // The target might not be initialized yet
   State *leaf = walk_down_init(target_state);
 
-  // Walk down until leaf
+  // Enter initial states down to the leaf
   walk_down_entry(target_state->_active, leaf);
   root->_active = leaf;
 }
@@ -261,10 +261,10 @@ State const *sc_run(State *root, EventType event) {
       execute_transition(root, root->_active, run_target, SC_TTYPE_EXTERNAL, NULL);
     }
 
-    // Check transitions of current state with no event
+    // Check automatic transitions of the new active branch
     t = find_transition(root, SC_NO_EVENT);
 
-    // Run all "run" functions including parents, continue change if requested
+    // Run all run functions of the active branch, continue if a change is requested
     run_target = t ? NULL : ancestors_run(root, event);
   }
 

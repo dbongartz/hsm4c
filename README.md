@@ -2,7 +2,7 @@
 
 [![Build Linux](https://github.com/dbongartz/hsm4c/actions/workflows/build_linux.yml/badge.svg)](https://github.com/dbongartz/hsm4c/actions/workflows/build_linux.yml)
 
-Hierachical Statemachine in C
+Hierarchical state machine (UML statechart) library in C.
 
 ## Build and test
 

@@ -167,7 +167,7 @@ static StateConfig const statecfgs[_NUM_STATES] = {
         },
     [A_DH] =
         {
-            .name = "A_HP",
+            .name = "A_DH",
             .parent = &states[A],
             .initial = &states[AC],
             .type = SC_TYPE_HISTORY_DEEP,

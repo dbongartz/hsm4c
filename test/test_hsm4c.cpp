@@ -165,6 +165,8 @@ TEST_CASE_FIXTURE(Fixture, "AAA to AAB to B to A deep history") {
                          runs({AAB, AA, A, ROOT}, EV_5));
 }
 
+// Relies on undefined behaviour: all choice guards false (see SC_TYPE_CHOICE). Documents the
+// current implementation, which waits in the choice state and re-evaluates on the next poll.
 TEST_CASE_FIXTURE(Fixture, "A to C via choice on later poll") {
   prepare();
   CHECK(run(EV_6) == Log{"guard", "-AAA", "-AA", "act"} + runs({A, ROOT}, EV_6));
@@ -248,8 +250,8 @@ TEST_CASE_FIXTURE(Fixture, "false guard takes no transition") {
  * - Parent state with no initial (Should work as target and with child as target)
  * - Auto transition on normal states
  * - Auto transitions on history states (Should not execute!)
- * - initial != self (can be cought)
- * - initial != other parent (can be cought)
+ * - initial != self (can be caught)
+ * - initial != other parent (can be caught)
  * - State change via run functions on lowest and high level
  * - State change via run on no transition found
  * - State change via run automatic

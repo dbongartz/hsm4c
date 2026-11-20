@@ -170,7 +170,7 @@ static StateConfig const my_statecfgs[_NUM_STATES] = {
         },
     [GB] =
         {
-            .name = "GA",
+            .name = "GB",
             .entry_fn = state_gb_entry,
             .exit_fn = state_gb_exit,
             .parent = &my_states[G],
@@ -197,10 +197,11 @@ int main(void) {
   current = sc_run(my_sm, 5);           // A->D->F
   current = sc_run(my_sm, 1);           // B
   current = sc_run(my_sm, 6);           // A->D->F (deep history of A, including D...)
-  current = sc_run(my_sm, 7);           // B (run action of F)
-  current = sc_run(my_sm, 7);           // A->C (run action of B)
-  current = sc_run(my_sm, 7);           // A->D->E (run action of BRANCH)
-  current = sc_run(my_sm, 8);           // G->GB (deep histoy with initial of G)
-  current = sc_run(my_sm, 8);           // No change (conditional)
-  current = sc_run(my_sm, SC_NO_EVENT); // G->GA (conditional >= 1) -> A->C (automatic)
+  current = sc_run(my_sm, 7);           // A->BRANCH, run of BRANCH -> A->D->E
+  current = sc_run(my_sm, 7);           // G->GB (deep history without history -> its initial)
+                                        // GB->GA not yet (condition_1 false on first call)
+  current = sc_run(my_sm, 7);           // G->GA (condition_1 true) -> A->C (automatic)
+  current = sc_run(my_sm, 8);           // No change (no transition for event 8)
+  current = sc_run(my_sm, 8);           // No change
+  current = sc_run(my_sm, SC_NO_EVENT); // No change
 }
